@@ -1,0 +1,105 @@
+name: Q-Tronic SMS Gateway
+version: 0.1.0
+slug: qtronic_sms_gateway
+description: >-
+  GSM gateway for ESPHome-based SIM800C nodes with Ingress UI, REST API,
+  MQTT publish/subscribe, SMS handling, and call control.
+url: https://q-tronic.local/qtronic_sms_gateway
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+  - i386
+startup: application
+boot: auto
+init: false
+stage: experimental
+panel_icon: mdi:message-text-lock
+panel_title: Q-Tronic SMS Gateway
+panel_admin: true
+ingress: true
+ingress_port: 8099
+ingress_stream: true
+webui: http://[HOST]:[PORT:8099]/
+watchdog: http://[HOST]:[PORT:8099]/health
+homeassistant_api: true
+ports:
+  8099/tcp: null
+ports_description:
+  8099/tcp: Q-Tronic SMS Gateway web UI and REST API
+options:
+  esphome:
+    host: ""
+    port: 6053
+    encryption_key: ""
+    send_sms_action: send_sms
+    unicode_send_sms_action: send_sms_unicode
+    dial_action: dial
+    disconnect_action: disconnect
+    rssi_object_id: rssi
+    registered_object_id: registered
+    sms_sender_object_id: sms_sender
+    sms_message_object_id: sms_message
+    incoming_call_object_id: incoming_call
+    call_state_object_id: call_state
+    ussd_object_id: ussd
+  sms:
+    default_encoding: auto
+    send_delay_ms: 3000
+  calling:
+    default_ring_time_s: 20
+    delay_between_calls_s: 5
+    max_retries: 0
+    retry_delay_s: 10
+    retry_forever: false
+    failure_action: next_recipient
+  mqtt:
+    enabled: true
+    host: core-mosquitto
+    port: 1883
+    username: ""
+    password: ""
+    topic_prefix: qtronic_sms_gateway
+    discovery_enabled: true
+    discovery_prefix: homeassistant
+  recipients: []
+schema:
+  esphome:
+    host: str
+    port: port
+    encryption_key: password
+    send_sms_action: str
+    unicode_send_sms_action: str
+    dial_action: str
+    disconnect_action: str
+    rssi_object_id: str
+    registered_object_id: str
+    sms_sender_object_id: str
+    sms_message_object_id: str
+    incoming_call_object_id: str
+    call_state_object_id: str
+    ussd_object_id: str
+  sms:
+    default_encoding: "list(auto|passthrough|transliterate|ucs2)"
+    send_delay_ms: "int(0,30000)"
+  calling:
+    default_ring_time_s: "int(1,3600)"
+    delay_between_calls_s: "int(0,300)"
+    max_retries: "int(0,100)"
+    retry_delay_s: "int(0,600)"
+    retry_forever: bool
+    failure_action: "list(next_recipient|stop_batch)"
+  mqtt:
+    enabled: bool
+    host: str
+    port: port
+    username: "str?"
+    password: "password?"
+    topic_prefix: str
+    discovery_enabled: bool
+    discovery_prefix: str
+  recipients:
+    - id: "str?"
+      name: str
+      phone: str

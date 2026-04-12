@@ -1,0 +1,122 @@
+configuration:
+  esphome:
+    name: Połączenie z ESPHome
+    description: Skonfiguruj węzeł ESPHome używany jako bramka modemu GSM.
+    fields:
+      host:
+        name: Host ESPHome
+        description: Adres IP lub hostname węzła ESPHome.
+      port:
+        name: Port API ESPHome
+        description: Port natywnego API ESPHome.
+      encryption_key:
+        name: Klucz szyfrowania ESPHome
+        description: Klucz szyfrowania Native API z YAML ESPHome.
+      send_sms_action:
+        name: Akcja SMS
+        description: Nazwa akcji ESPHome do wysyłki SMS.
+      unicode_send_sms_action:
+        name: Akcja SMS Unicode
+        description: Nazwa akcji ESPHome do wysyłki SMS UCS2.
+      dial_action:
+        name: Akcja wybierania
+        description: Nazwa akcji ESPHome do rozpoczęcia połączenia.
+      disconnect_action:
+        name: Akcja rozłączenia
+        description: Nazwa akcji ESPHome do rozłączenia połączenia.
+      rssi_object_id:
+        name: Object ID RSSI
+        description: Object ID używany do wykrywania sensora RSSI.
+      registered_object_id:
+        name: Object ID Registered
+        description: Object ID używany do wykrywania rejestracji w sieci.
+      sms_sender_object_id:
+        name: Object ID nadawcy SMS
+        description: Object ID używany do wykrywania nadawcy SMS.
+      sms_message_object_id:
+        name: Object ID treści SMS
+        description: Object ID używany do wykrywania treści SMS.
+      incoming_call_object_id:
+        name: Object ID połączenia przychodzącego
+        description: Object ID używany do wykrywania numeru połączenia przychodzącego.
+      call_state_object_id:
+        name: Object ID stanu połączenia
+        description: Object ID używany do wykrywania stanu połączenia.
+      ussd_object_id:
+        name: Object ID USSD
+        description: Object ID używany do wykrywania wiadomości USSD.
+  sms:
+    name: Ustawienia SMS
+    description: Skonfiguruj sposób wysyłki wiadomości SMS.
+    fields:
+      default_encoding:
+        name: Domyślne kodowanie SMS
+        description: Preferowany tryb kodowania dla SMS.
+      send_delay_ms:
+        name: Odstęp między SMS-ami [ms]
+        description: Opóźnienie przy wysyłce wielu SMS-ów w jednym batchu.
+  calling:
+    name: Ustawienia połączeń
+    description: Skonfiguruj połączenia wychodzące i politykę ponowień.
+    fields:
+      default_ring_time_s:
+        name: Domyślny czas dzwonienia [s]
+        description: Maksymalny czas pojedynczej próby połączenia.
+      delay_between_calls_s:
+        name: Odstęp między połączeniami [s]
+        description: Czas oczekiwania przed wybraniem kolejnego odbiorcy.
+      max_retries:
+        name: Liczba ponowień na odbiorcę
+        description: Ile razy ponawiać połączenie przed przejściem dalej lub zatrzymaniem.
+      retry_delay_s:
+        name: Odstęp między ponowieniami [s]
+        description: Pauza przed kolejną próbą do tego samego odbiorcy.
+      retry_forever:
+        name: Dzwoń do skutku
+        description: Ponawiaj połączenie aż do skutecznego połączenia.
+      failure_action:
+        name: Akcja po niepowodzeniu
+        description: Co zrobić po wyczerpaniu ponowień.
+  mqtt:
+    name: MQTT
+    description: Publikuj stany i zdarzenia oraz odbieraj komendy przez MQTT.
+    fields:
+      enabled:
+        name: Włącz MQTT
+        description: Włącza most MQTT.
+      host:
+        name: Host MQTT
+        description: Hostname brokera MQTT.
+      port:
+        name: Port MQTT
+        description: Port brokera MQTT.
+      username:
+        name: Użytkownik MQTT
+        description: Opcjonalna nazwa użytkownika do uwierzytelniania MQTT.
+      password:
+        name: Hasło MQTT
+        description: Opcjonalne hasło do uwierzytelniania MQTT.
+      topic_prefix:
+        name: Prefiks topiców
+        description: Bazowy prefiks topiców Q-Tronic MQTT.
+      discovery_enabled:
+        name: Włącz discovery Home Assistant
+        description: Publikuj payloady discovery MQTT dla sensorów Q-Tronic.
+      discovery_prefix:
+        name: Prefiks discovery
+        description: Prefiks discovery MQTT dla Home Assistant.
+  recipients:
+    name: Odbiorcy zapisani
+    description: Zdefiniuj nazwanych odbiorców do SMS-ów i połączeń.
+    fields:
+      id:
+        name: ID odbiorcy
+        description: Opcjonalny stały identyfikator używany przez REST i MQTT.
+      name:
+        name: Nazwa odbiorcy
+        description: Nazwa wyświetlana odbiorcy.
+      phone:
+        name: Numer telefonu
+        description: Międzynarodowy numer telefonu.
+network:
+  8099/TCP: Q-Tronic SMS Gateway web UI i REST API

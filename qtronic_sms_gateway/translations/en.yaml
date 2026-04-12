@@ -1,0 +1,122 @@
+configuration:
+  esphome:
+    name: ESPHome connection
+    description: Configure the ESPHome node used as the GSM modem gateway.
+    fields:
+      host:
+        name: ESPHome host
+        description: IP address or hostname of the ESPHome node.
+      port:
+        name: ESPHome API port
+        description: Native ESPHome API port.
+      encryption_key:
+        name: ESPHome encryption key
+        description: Native API encryption key from the ESPHome YAML.
+      send_sms_action:
+        name: SMS action
+        description: ESPHome action name for sending GSM text messages.
+      unicode_send_sms_action:
+        name: Unicode SMS action
+        description: ESPHome action name for UCS2 SMS messages.
+      dial_action:
+        name: Dial action
+        description: ESPHome action name for starting an outbound call.
+      disconnect_action:
+        name: Disconnect action
+        description: ESPHome action name for hanging up a call.
+      rssi_object_id:
+        name: RSSI object ID
+        description: Object ID used to detect the RSSI sensor.
+      registered_object_id:
+        name: Registered object ID
+        description: Object ID used to detect network registration.
+      sms_sender_object_id:
+        name: SMS sender object ID
+        description: Object ID used to detect the SMS sender text sensor.
+      sms_message_object_id:
+        name: SMS message object ID
+        description: Object ID used to detect the SMS message text sensor.
+      incoming_call_object_id:
+        name: Incoming call object ID
+        description: Object ID used to detect incoming call caller ID.
+      call_state_object_id:
+        name: Call state object ID
+        description: Object ID used to detect current call state.
+      ussd_object_id:
+        name: USSD object ID
+        description: Object ID used to detect USSD messages.
+  sms:
+    name: SMS settings
+    description: Configure outgoing SMS behavior.
+    fields:
+      default_encoding:
+        name: Default SMS encoding
+        description: Preferred encoding mode for outgoing SMS.
+      send_delay_ms:
+        name: Delay between SMS messages [ms]
+        description: Delay used when sending multiple SMS messages in one batch.
+  calling:
+    name: Call settings
+    description: Configure outbound call behavior and retry policy.
+    fields:
+      default_ring_time_s:
+        name: Default ring time [s]
+        description: Maximum duration of a single call attempt.
+      delay_between_calls_s:
+        name: Delay between calls [s]
+        description: Wait time before the next recipient is dialed.
+      max_retries:
+        name: Retries per recipient
+        description: Number of retries before moving on or stopping.
+      retry_delay_s:
+        name: Delay between retries [s]
+        description: Pause before retrying the same recipient.
+      retry_forever:
+        name: Retry forever
+        description: Keep retrying the same recipient until a call connects.
+      failure_action:
+        name: Failure action
+        description: What to do after retries are exhausted.
+  mqtt:
+    name: MQTT
+    description: Publish states/events and receive commands through MQTT.
+    fields:
+      enabled:
+        name: Enable MQTT
+        description: Enable the MQTT bridge.
+      host:
+        name: MQTT host
+        description: Hostname of the MQTT broker.
+      port:
+        name: MQTT port
+        description: Port of the MQTT broker.
+      username:
+        name: MQTT username
+        description: Optional username for MQTT authentication.
+      password:
+        name: MQTT password
+        description: Optional password for MQTT authentication.
+      topic_prefix:
+        name: Topic prefix
+        description: Base topic used for Q-Tronic MQTT topics.
+      discovery_enabled:
+        name: Enable Home Assistant discovery
+        description: Publish MQTT discovery payloads for Q-Tronic sensors.
+      discovery_prefix:
+        name: Discovery prefix
+        description: Home Assistant MQTT discovery prefix.
+  recipients:
+    name: Saved recipients
+    description: Define named recipients for SMS and call commands.
+    fields:
+      id:
+        name: Recipient ID
+        description: Optional stable identifier used by REST and MQTT.
+      name:
+        name: Recipient name
+        description: Display name of the recipient.
+      phone:
+        name: Phone number
+        description: International phone number.
+network:
+  8099/TCP: Q-Tronic SMS Gateway web UI and REST API

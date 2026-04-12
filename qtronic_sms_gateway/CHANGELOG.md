@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1
+
+- Fix Ingress frontend API URLs by building them from the actual Home Assistant ingress `root_path`
+- Disable dashboard HTML caching to avoid stale frontend code after add-on updates
+
 ## 0.3.0
 
 - Add MQTT-discovered `notify` entities for saved-recipient SMS sending from Home Assistant automations

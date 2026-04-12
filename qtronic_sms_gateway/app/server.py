@@ -38,6 +38,13 @@ class RuntimeState:
 runtime = RuntimeState()
 
 
+def _ingress_api_url(request: Request, route_name: str) -> str:
+    """Build an ingress-aware path for frontend fetch() calls."""
+    root_path = str(request.scope.get("root_path", "") or "").rstrip("/")
+    route_path = str(request.app.url_path_for(route_name))
+    return f"{root_path}{route_path}" if root_path else route_path
+
+
 def _dashboard_html() -> str:
     return """<!doctype html>
 <html lang="pl">
@@ -383,16 +390,20 @@ def _gateway_or_400() -> GatewayService:
 async def index(request: Request) -> str:
     html = _dashboard_html()
     replacements = {
-        "__API_STATUS_URL__": str(request.url_for("api_status")),
-        "__API_CONFIG_URL__": str(request.url_for("api_config")),
-        "__API_EVENTS_URL__": str(request.url_for("api_events")),
-        "__API_SEND_SMS_URL__": str(request.url_for("api_send_sms")),
-        "__API_CALL_URL__": str(request.url_for("api_call")),
-        "__API_HANGUP_URL__": str(request.url_for("api_hangup")),
+        "__API_STATUS_URL__": _ingress_api_url(request, "api_status"),
+        "__API_CONFIG_URL__": _ingress_api_url(request, "api_config"),
+        "__API_EVENTS_URL__": _ingress_api_url(request, "api_events"),
+        "__API_SEND_SMS_URL__": _ingress_api_url(request, "api_send_sms"),
+        "__API_CALL_URL__": _ingress_api_url(request, "api_call"),
+        "__API_HANGUP_URL__": _ingress_api_url(request, "api_hangup"),
     }
     for key, value in replacements.items():
         html = html.replace(key, value)
-    return html
+    _LOGGER.info("Serving ingress dashboard with root_path=%s", request.scope.get("root_path", ""))
+    return HTMLResponse(
+        content=html,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"},
+    )
 
 
 @app.get("/health")

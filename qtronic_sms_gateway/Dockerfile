@@ -20,7 +20,7 @@ RUN apk add --no-cache \
 COPY app /app
 COPY run.sh /run.sh
 
-RUN pip3 install --no-cache-dir \
+RUN pip3 install --no-cache-dir --break-system-packages \
     aioesphomeapi==44.13.3 \
     "aiomqtt>=2,<3" \
     "fastapi>=0.115,<1" \

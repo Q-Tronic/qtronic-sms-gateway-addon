@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3
+
+- Fix Alpine PEP 668 build failure by allowing pip installs in the add-on image
+
 ## 0.1.2
 
 - Fix add-on image build by quoting pip version specifiers in Dockerfile

@@ -194,6 +194,13 @@ def _dashboard_html() -> str:
   </div>
 
   <script>
+    const API_STATUS_URL = "__API_STATUS_URL__";
+    const API_CONFIG_URL = "__API_CONFIG_URL__";
+    const API_EVENTS_URL = "__API_EVENTS_URL__";
+    const API_SEND_SMS_URL = "__API_SEND_SMS_URL__";
+    const API_CALL_URL = "__API_CALL_URL__";
+    const API_HANGUP_URL = "__API_HANGUP_URL__";
+
     function setText(id, value) {
       const node = document.getElementById(id);
       if (node) node.textContent = value;
@@ -219,9 +226,9 @@ def _dashboard_html() -> str:
 
     async function loadStatus() {
       const [statusResp, configResp, eventsResp] = await Promise.all([
-        fetch("/api/status"),
-        fetch("/api/config"),
-        fetch("/api/events")
+        fetch(API_STATUS_URL),
+        fetch(API_CONFIG_URL),
+        fetch(API_EVENTS_URL)
       ]);
       const status = await statusResp.json();
       const config = await configResp.json();
@@ -300,7 +307,7 @@ def _dashboard_html() -> str:
       if (recipient.startsWith("+") || recipient.match(/^\\d/)) payload.recipient = recipient;
       else payload.recipient_id = recipient;
       try {
-        await postJson("/api/send-sms", payload);
+        await postJson(API_SEND_SMS_URL, payload);
         alert("SMS został zlecony");
       } catch (err) {
         alert(err.message);
@@ -314,7 +321,7 @@ def _dashboard_html() -> str:
       if (recipient.startsWith("+") || recipient.match(/^\\d/)) payload.recipient = recipient;
       else payload.recipient_id = recipient;
       try {
-        await postJson("/api/call", payload);
+        await postJson(API_CALL_URL, payload);
         alert("Połączenie zostało zlecone");
       } catch (err) {
         alert(err.message);
@@ -323,7 +330,7 @@ def _dashboard_html() -> str:
 
     async function hangup() {
       try {
-        await postJson("/api/hangup", {});
+        await postJson(API_HANGUP_URL, {});
         alert("Rozłączenie zostało zlecone");
       } catch (err) {
         alert(err.message);
@@ -373,8 +380,19 @@ def _gateway_or_400() -> GatewayService:
 
 
 @app.get("/", response_class=HTMLResponse)
-async def index() -> str:
-    return _dashboard_html()
+async def index(request: Request) -> str:
+    html = _dashboard_html()
+    replacements = {
+        "__API_STATUS_URL__": str(request.url_for("api_status")),
+        "__API_CONFIG_URL__": str(request.url_for("api_config")),
+        "__API_EVENTS_URL__": str(request.url_for("api_events")),
+        "__API_SEND_SMS_URL__": str(request.url_for("api_send_sms")),
+        "__API_CALL_URL__": str(request.url_for("api_call")),
+        "__API_HANGUP_URL__": str(request.url_for("api_hangup")),
+    }
+    for key, value in replacements.items():
+        html = html.replace(key, value)
+    return html
 
 
 @app.get("/health")

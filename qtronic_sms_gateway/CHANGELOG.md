@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+- Fix Ingress dashboard API URLs so the web UI talks to the add-on instead of Home Assistant core `/api/*`
+
 ## 0.2.0
 
 - Add detailed SMS and call logging in the add-on logs

@@ -46,6 +46,17 @@ class MQTTBridge:
     def _topic(self, suffix: str) -> str:
         return f"{self.topic_prefix}/{suffix.lstrip('/')}"
 
+    def _device(self) -> dict[str, Any]:
+        return {
+            "identifiers": ["qtronic_sms_gateway_addon"],
+            "name": "Q-Tronic SMS Gateway",
+            "manufacturer": "Q-Tronic",
+            "model": "ESPHome GSM Gateway",
+        }
+
+    def _availability(self) -> list[dict[str, str]]:
+        return [{"topic": self._topic("status")}]
+
     async def start(self) -> None:
         if not self.config.enabled:
             _LOGGER.info("MQTT bridge is disabled in add-on configuration")
@@ -128,7 +139,16 @@ class MQTTBridge:
                 payload = {"value": payload_text}
 
             try:
-                if topic == self._topic("send_sms/set"):
+                if self._is_notify_sms_topic(topic):
+                    recipient_id = self._extract_notify_recipient_id(topic)
+                    _LOGGER.info(
+                        "Received MQTT notify send request for recipient_id=%s on topic %s",
+                        recipient_id,
+                        topic,
+                    )
+                    result = await self._send_sms_from_notify(payload_text, recipient_id=recipient_id)
+                    await self._publish_json(self._topic("result/send_sms"), result)
+                elif topic == self._topic("send_sms/set"):
                     _LOGGER.info("Received MQTT send_sms request on topic %s", topic)
                     recipients = self.gateway.resolve_recipient_numbers(
                         recipient=payload.get("recipient"),
@@ -256,6 +276,7 @@ class MQTTBridge:
             self._topic("send_sms/set"),
             self._topic("call/set"),
             self._topic("hangup/set"),
+            self._topic("notify/send_sms/+"),
             self._topic("request_status"),
             self._topic("control/sms_targets/set"),
             self._topic("control/sms_message/set"),
@@ -296,6 +317,21 @@ class MQTTBridge:
             encoding=self._controls["sms_encoding"],
         )
 
+    async def _send_sms_from_notify(
+        self,
+        message: str,
+        *,
+        recipient_id: str,
+    ) -> dict[str, Any]:
+        if not message.strip():
+            raise RuntimeError("SMS message is empty.")
+        recipients = self.gateway.resolve_recipient_numbers(recipient_ids=[recipient_id])
+        return await self.gateway.async_send_sms_batch(
+            message=message,
+            recipients=recipients,
+            encoding=self.gateway.config.sms.default_encoding,
+        )
+
     async def _call_from_controls(self, *, recipient_id: str | None = None) -> dict[str, Any]:
         ring_time = max(1, int(float(self._controls["call_ring_time"] or "1")))
         if recipient_id:
@@ -315,16 +351,19 @@ class MQTTBridge:
         suffix = "/press"
         return topic[len(prefix) : -len(suffix)]
 
+    def _is_notify_sms_topic(self, topic: str) -> bool:
+        return bool(re.fullmatch(re.escape(self._topic("notify/send_sms/")) + r"[^/]+", topic))
+
+    def _extract_notify_recipient_id(self, topic: str) -> str:
+        prefix = self._topic("notify/send_sms/")
+        return topic[len(prefix) :]
+
     async def _publish_discovery(self) -> None:
         if not self.config.discovery_enabled:
             return
 
-        device = {
-            "identifiers": ["qtronic_sms_gateway_addon"],
-            "name": "Q-Tronic SMS Gateway",
-            "manufacturer": "Q-Tronic",
-            "model": "ESPHome GSM Gateway",
-        }
+        device = self._device()
+        availability = self._availability()
 
         discovery_items = [
             (
@@ -332,6 +371,7 @@ class MQTTBridge:
                 "rssi",
                 {
                     "name": "Q-Tronic RSSI",
+                    "default_entity_id": "sensor.qtronic_sms_gateway_rssi",
                     "state_topic": self._topic("state/rssi"),
                     "unit_of_measurement": "dBm",
                     "icon": "mdi:signal",
@@ -342,6 +382,7 @@ class MQTTBridge:
                 "registered",
                 {
                     "name": "Q-Tronic Registered",
+                    "default_entity_id": "binary_sensor.qtronic_sms_gateway_registered",
                     "state_topic": self._topic("state/registered"),
                     "payload_on": "true",
                     "payload_off": "false",
@@ -353,6 +394,7 @@ class MQTTBridge:
                 "sms_sender",
                 {
                     "name": "Q-Tronic SMS Sender",
+                    "default_entity_id": "sensor.qtronic_sms_gateway_sms_sender",
                     "state_topic": self._topic("state/sms_sender"),
                     "icon": "mdi:account-arrow-left",
                 },
@@ -362,6 +404,7 @@ class MQTTBridge:
                 "sms_message",
                 {
                     "name": "Q-Tronic SMS Message",
+                    "default_entity_id": "sensor.qtronic_sms_gateway_sms_message",
                     "state_topic": self._topic("state/sms_message"),
                     "icon": "mdi:message-text",
                 },
@@ -371,6 +414,7 @@ class MQTTBridge:
                 "incoming_call",
                 {
                     "name": "Q-Tronic Incoming Call",
+                    "default_entity_id": "sensor.qtronic_sms_gateway_incoming_call",
                     "state_topic": self._topic("state/incoming_call"),
                     "icon": "mdi:phone-incoming",
                 },
@@ -380,6 +424,7 @@ class MQTTBridge:
                 "call_state",
                 {
                     "name": "Q-Tronic Call State",
+                    "default_entity_id": "sensor.qtronic_sms_gateway_call_state",
                     "state_topic": self._topic("state/call_state"),
                     "icon": "mdi:phone",
                 },
@@ -389,6 +434,7 @@ class MQTTBridge:
                 "ussd",
                 {
                     "name": "Q-Tronic USSD",
+                    "default_entity_id": "sensor.qtronic_sms_gateway_ussd",
                     "state_topic": self._topic("state/ussd"),
                     "icon": "mdi:card-text",
                 },
@@ -398,6 +444,7 @@ class MQTTBridge:
                 "sms_targets",
                 {
                     "name": "Q-Tronic SMS Targets",
+                    "default_entity_id": "text.qtronic_sms_gateway_sms_targets",
                     "state_topic": self._topic("control/sms_targets/state"),
                     "command_topic": self._topic("control/sms_targets/set"),
                     "icon": "mdi:account-multiple",
@@ -408,6 +455,7 @@ class MQTTBridge:
                 "sms_message_input",
                 {
                     "name": "Q-Tronic SMS Message Input",
+                    "default_entity_id": "text.qtronic_sms_gateway_sms_message_input",
                     "state_topic": self._topic("control/sms_message/state"),
                     "command_topic": self._topic("control/sms_message/set"),
                     "icon": "mdi:message-text-edit",
@@ -418,6 +466,7 @@ class MQTTBridge:
                 "sms_encoding",
                 {
                     "name": "Q-Tronic SMS Encoding",
+                    "default_entity_id": "select.qtronic_sms_gateway_sms_encoding",
                     "state_topic": self._topic("control/sms_encoding/state"),
                     "command_topic": self._topic("control/sms_encoding/set"),
                     "options": ["auto", "passthrough", "transliterate", "ucs2"],
@@ -429,6 +478,7 @@ class MQTTBridge:
                 "send_sms",
                 {
                     "name": "Q-Tronic Send SMS",
+                    "default_entity_id": "button.qtronic_sms_gateway_send_sms",
                     "command_topic": self._topic("action/send_sms/press"),
                     "payload_press": "PRESS",
                     "icon": "mdi:send",
@@ -439,6 +489,7 @@ class MQTTBridge:
                 "call_targets",
                 {
                     "name": "Q-Tronic Call Targets",
+                    "default_entity_id": "text.qtronic_sms_gateway_call_targets",
                     "state_topic": self._topic("control/call_targets/state"),
                     "command_topic": self._topic("control/call_targets/set"),
                     "icon": "mdi:phone-outgoing",
@@ -449,6 +500,7 @@ class MQTTBridge:
                 "call_ring_time",
                 {
                     "name": "Q-Tronic Call Ring Time",
+                    "default_entity_id": "number.qtronic_sms_gateway_call_ring_time",
                     "state_topic": self._topic("control/call_ring_time/state"),
                     "command_topic": self._topic("control/call_ring_time/set"),
                     "min": 1,
@@ -463,6 +515,7 @@ class MQTTBridge:
                 "call",
                 {
                     "name": "Q-Tronic Call",
+                    "default_entity_id": "button.qtronic_sms_gateway_call",
                     "command_topic": self._topic("action/call/press"),
                     "payload_press": "PRESS",
                     "icon": "mdi:phone",
@@ -473,6 +526,7 @@ class MQTTBridge:
                 "hangup",
                 {
                     "name": "Q-Tronic Hang Up",
+                    "default_entity_id": "button.qtronic_sms_gateway_hangup",
                     "command_topic": self._topic("action/hangup/press"),
                     "payload_press": "PRESS",
                     "icon": "mdi:phone-hangup",
@@ -488,6 +542,9 @@ class MQTTBridge:
                         f"send_sms_to_{recipient.id}",
                         {
                             "name": f"Q-Tronic Send SMS to {recipient.name}",
+                            "default_entity_id": (
+                                f"button.qtronic_sms_gateway_send_sms_to_{recipient.id}"
+                            ),
                             "command_topic": self._topic(f"action/send_sms_to/{recipient.id}/press"),
                             "payload_press": "PRESS",
                             "icon": "mdi:message-arrow-right",
@@ -498,15 +555,30 @@ class MQTTBridge:
                         f"call_to_{recipient.id}",
                         {
                             "name": f"Q-Tronic Call {recipient.name}",
+                            "default_entity_id": f"button.qtronic_sms_gateway_call_{recipient.id}",
                             "command_topic": self._topic(f"action/call_to/{recipient.id}/press"),
                             "payload_press": "PRESS",
                             "icon": "mdi:phone-forward",
                         },
                     ),
+                    (
+                        "notify",
+                        f"sms_{recipient.id}",
+                        {
+                            "name": f"Q-Tronic SMS {recipient.name}",
+                            "default_entity_id": f"notify.qtronic_sms_gateway_sms_{recipient.id}",
+                            "command_topic": self._topic(f"notify/send_sms/{recipient.id}"),
+                            "icon": "mdi:message-text",
+                        },
+                    ),
                 ]
             )
 
-        availability = [{"topic": self._topic("status")}]
+        _LOGGER.info(
+            "Publishing MQTT discovery for %s base entities and %s saved recipients",
+            len(discovery_items),
+            len(self.gateway.saved_recipients),
+        )
         for platform, object_id, payload in discovery_items:
             discovery_topic = (
                 f"{self.discovery_prefix}/{platform}/qtronic_sms_gateway/{object_id}/config"
@@ -518,6 +590,7 @@ class MQTTBridge:
                     "device": device,
                 }
             )
+            _LOGGER.info("Publishing MQTT discovery topic %s", discovery_topic)
             await self._publish_json(discovery_topic, payload, retain=True)
 
         trigger_items = [
@@ -527,8 +600,8 @@ class MQTTBridge:
                     "automation_type": "trigger",
                     "platform": "device_automation",
                     "topic": self._topic("event/sms_received"),
-                    "type": "received",
-                    "subtype": "sms",
+                    "type": "sms_received",
+                    "subtype": "message",
                     "device": device,
                 },
             ),
@@ -538,8 +611,8 @@ class MQTTBridge:
                     "automation_type": "trigger",
                     "platform": "device_automation",
                     "topic": self._topic("event/incoming_call"),
-                    "type": "received",
-                    "subtype": "call",
+                    "type": "incoming_call",
+                    "subtype": "phone",
                     "device": device,
                 },
             ),
@@ -549,4 +622,5 @@ class MQTTBridge:
             discovery_topic = (
                 f"{self.discovery_prefix}/device_automation/qtronic_sms_gateway/{object_id}/config"
             )
+            _LOGGER.info("Publishing MQTT discovery topic %s", discovery_topic)
             await self._publish_json(discovery_topic, payload, retain=True)

@@ -435,6 +435,7 @@ async def api_send_sms(request: Request) -> JSONResponse:
     if not payload.get("message"):
         raise HTTPException(status_code=400, detail="Message is required.")
     try:
+        _LOGGER.info("REST send-sms requested")
         recipients = gateway.resolve_recipient_numbers(
             recipient=payload.get("recipient"),
             recipient_id=payload.get("recipient_id"),
@@ -456,6 +457,7 @@ async def api_call(request: Request) -> JSONResponse:
     gateway = _gateway_or_400()
     payload = await request.json()
     try:
+        _LOGGER.info("REST call requested")
         recipients = gateway.resolve_recipient_numbers(
             recipient=payload.get("recipient"),
             recipient_id=payload.get("recipient_id"),
@@ -475,6 +477,7 @@ async def api_call(request: Request) -> JSONResponse:
 async def api_hangup() -> JSONResponse:
     gateway = _gateway_or_400()
     try:
+        _LOGGER.info("REST hangup requested")
         result = await gateway.async_hangup()
         return JSONResponse(result)
     except Exception as err:

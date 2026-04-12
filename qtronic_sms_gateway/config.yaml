@@ -1,5 +1,5 @@
 name: Q-Tronic SMS Gateway
-version: 0.2.1
+version: 0.3.0
 slug: qtronic_sms_gateway
 description: >-
   GSM gateway for ESPHome-based SIM800C nodes with Ingress UI, REST API,
@@ -24,6 +24,7 @@ ingress_stream: true
 webui: http://[HOST]:[PORT:8099]/
 watchdog: http://[HOST]:[PORT:8099]/health
 homeassistant_api: true
+hassio_role: homeassistant
 ports:
   8099/tcp: null
 ports_description:

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0
+
+- Add MQTT-discovered `notify` entities for saved-recipient SMS sending from Home Assistant automations
+- Improve MQTT discovery for call/SMS controls with stable entity IDs and extra discovery logs
+- Request `homeassistant` API role so inbound SMS and call events can be bridged back to the Home Assistant event bus
+
 ## 0.2.1
 
 - Fix Ingress dashboard API URLs so the web UI talks to the add-on instead of Home Assistant core `/api/*`

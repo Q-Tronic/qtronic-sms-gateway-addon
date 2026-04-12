@@ -118,6 +118,73 @@ Jeśli chcesz sterować add-onem z automatyzacji bez custom integration, po MQTT
 - czas dzwonienia
 - przyciski `Send SMS`, `Call`, `Hang Up`
 - dodatkowe przyciski `Send SMS to <recipient>` i `Call <recipient>` dla zapisanych odbiorców
+- natywne encje `notify` dla zapisanych odbiorców: `Q-Tronic SMS <recipient>`
+
+### Wysyłanie SMS z automatyzacji
+
+Najwygodniejsza ścieżka dla zapisanych odbiorców to `notify`.
+
+Przykład:
+
+```yaml
+actions:
+  - action: notify.qtronic_sms_gateway_sms_przemek
+    data:
+      message: "Brama została otwarta"
+```
+
+Dla wielu osób użyj kilku akcji `notify`, po jednej na odbiorcę.
+
+Jeśli chcesz użyć pól MQTT helpers, możesz też zrobić:
+
+```yaml
+actions:
+  - action: text.set_value
+    target:
+      entity_id: text.qtronic_sms_gateway_sms_targets
+    data:
+      value: "przemek,marta"
+  - action: text.set_value
+    target:
+      entity_id: text.qtronic_sms_gateway_sms_message_input
+    data:
+      value: "Alarm w garażu"
+  - action: button.press
+    target:
+      entity_id: button.qtronic_sms_gateway_send_sms
+```
+
+### Wykonywanie połączeń z automatyzacji
+
+Dla zapisanych odbiorców użyj przycisków `button`.
+
+Przykład:
+
+```yaml
+actions:
+  - action: button.press
+    target:
+      entity_id: button.qtronic_sms_gateway_call_przemek
+```
+
+Dla numeru ręcznego albo kilku odbiorców przez helpery:
+
+```yaml
+actions:
+  - action: text.set_value
+    target:
+      entity_id: text.qtronic_sms_gateway_call_targets
+    data:
+      value: "przemek,marta"
+  - action: number.set_value
+    target:
+      entity_id: number.qtronic_sms_gateway_call_ring_time
+    data:
+      value: 20
+  - action: button.press
+    target:
+      entity_id: button.qtronic_sms_gateway_call
+```
 
 ## Saved Recipients
 

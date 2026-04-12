@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2
+
+- Fix add-on image build by quoting pip version specifiers in Dockerfile
+
 ## 0.1.1
 
 - Mask public example phone numbers in documentation and UI placeholders

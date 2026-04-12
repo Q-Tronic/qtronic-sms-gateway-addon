@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1
+
+- Mask public example phone numbers in documentation and UI placeholders
+- Publish refreshed add-on package so Home Assistant can detect the update
+
 ## 0.1.0
 
 - Initial add-on scaffold

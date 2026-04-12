@@ -263,10 +263,64 @@ class GatewayService:
         }
         if store:
             self._recent_events.appendleft(event)
+        self._log_event_summary(event)
         for listener in tuple(self._listeners):
             result = listener(event)
             if asyncio.iscoroutine(result):
                 asyncio.create_task(result)
+
+    def _log_event_summary(self, event: dict[str, Any]) -> None:
+        event_type = event.get("type")
+        if event_type == "sms_received":
+            sender = event.get("saved_recipient_name") or event.get("sender")
+            _LOGGER.info("SMS received from %s: %s", sender, event.get("message"))
+        elif event_type == "incoming_call":
+            caller = event.get("saved_recipient_name") or event.get("caller")
+            _LOGGER.info("Incoming call from %s", caller)
+        elif event_type == "sms_batch_started":
+            _LOGGER.info(
+                "SMS batch %s started for %s (encoding=%s, len=%s)",
+                event.get("batch_id"),
+                ", ".join(event.get("recipients", [])),
+                event.get("encoding"),
+                event.get("message_length"),
+            )
+        elif event_type == "sms_sent":
+            _LOGGER.info(
+                "SMS batch %s sent to %s (encoding=%s): %s",
+                event.get("batch_id"),
+                event.get("recipient_label"),
+                event.get("encoding"),
+                event.get("message"),
+            )
+        elif event_type == "sms_batch_finished":
+            _LOGGER.info(
+                "SMS batch %s finished with status=%s completed=%s failed=%s error=%s",
+                event.get("batch_id"),
+                event.get("status"),
+                event.get("completed_recipients"),
+                event.get("failed_recipient"),
+                event.get("last_error"),
+            )
+        elif event_type == "call_batch_started":
+            _LOGGER.info(
+                "Call batch %s started for %s (ring_time=%ss)",
+                event.get("batch_id"),
+                ", ".join(event.get("recipients", [])),
+                event.get("ring_time_s"),
+            )
+        elif event_type == "call_batch_finished":
+            _LOGGER.info(
+                "Call batch %s finished with status=%s completed=%s failed=%s unknown=%s error=%s",
+                event.get("batch_id"),
+                event.get("status"),
+                event.get("completed_recipients"),
+                event.get("failed_recipients"),
+                event.get("unknown_recipients"),
+                event.get("last_error"),
+            )
+        elif event_type == "call_hung_up":
+            _LOGGER.info("Active call has been hung up using action=%s", event.get("action"))
 
     def events_snapshot(self) -> list[dict[str, Any]]:
         return list(self._recent_events)
@@ -402,6 +456,21 @@ class GatewayService:
         if not numbers:
             raise RuntimeError("No recipients were resolved.")
         return numbers
+
+    def resolve_recipient_input(self, raw_value: str | None) -> list[str]:
+        tokens = [
+            token.strip()
+            for token in re.split(r"[,\n;]+", raw_value or "")
+            if isinstance(token, str) and token.strip()
+        ]
+        recipients: list[str] = []
+        recipient_ids: list[str] = []
+        for token in tokens:
+            if self.recipient_by_id(token) is not None:
+                recipient_ids.append(token)
+            else:
+                recipients.append(token)
+        return self.resolve_recipient_numbers(recipients=recipients, recipient_ids=recipient_ids)
 
     def describe_recipient(self, phone: str) -> str:
         normalized = normalize_phone_number_loose(phone)
@@ -576,6 +645,7 @@ class GatewayService:
                 "batch_id": batch_label,
                 "recipients": list(recipient_labels),
                 "encoding": self._last_sms_batch.encoding,
+                "message_length": len(message),
             },
         )
 
@@ -604,6 +674,8 @@ class GatewayService:
                             "recipient": recipient,
                             "recipient_label": recipient_label,
                             "encoding": resolved_mode,
+                            "message": outgoing_message,
+                            "message_length": len(outgoing_message),
                         },
                     )
                 except Exception as err:
@@ -801,15 +873,35 @@ class GatewayService:
         if not self.has_call_state_tracking:
             await asyncio.sleep(ring_time_s)
             await self._execute_user_service(self.disconnect_action)
+            _LOGGER.info(
+                "Call batch %s on %s: finished dialing %s without call state tracking",
+                batch_id,
+                self.host,
+                recipient_label,
+            )
             return "unknown"
 
         connected = await self._wait_for_call_connected(ring_time_s)
         if connected:
             await asyncio.sleep(ring_time_s)
             await self._execute_user_service(self.disconnect_action)
+            _LOGGER.info(
+                "Call batch %s on %s: call with %s connected and was disconnected after %ss",
+                batch_id,
+                self.host,
+                recipient_label,
+                ring_time_s,
+            )
             return "connected"
 
         await self._execute_user_service(self.disconnect_action)
+        _LOGGER.info(
+            "Call batch %s on %s: call to %s did not connect within %ss",
+            batch_id,
+            self.host,
+            recipient_label,
+            ring_time_s,
+        )
         return "not_connected"
 
     async def _async_on_connect(self) -> None:

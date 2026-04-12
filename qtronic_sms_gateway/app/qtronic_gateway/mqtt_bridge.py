@@ -5,11 +5,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from typing import Any
 
 from aiomqtt import Client, MqttError
 
 from .gateway import GatewayService
+from .sms import normalize_encoding
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -25,6 +27,13 @@ class MQTTBridge:
         self._stop_event = asyncio.Event()
         self._event_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=200)
         self._remove_listener = gateway.subscribe(self._on_gateway_event)
+        self._controls: dict[str, str] = {
+            "sms_targets": "",
+            "sms_message": "",
+            "sms_encoding": gateway.config.sms.default_encoding,
+            "call_targets": "",
+            "call_ring_time": str(gateway.config.calling.default_ring_time_s),
+        }
 
     @property
     def topic_prefix(self) -> str:
@@ -76,11 +85,9 @@ class MQTTBridge:
                     _LOGGER.info("Connected to MQTT broker %s:%s", self.config.host, self.config.port)
                     await self._publish_availability(True)
                     await self._publish_discovery()
+                    await self._publish_control_snapshot()
                     await self._publish_snapshot()
-                    await client.subscribe(self._topic("send_sms/set"))
-                    await client.subscribe(self._topic("call/set"))
-                    await client.subscribe(self._topic("hangup/set"))
-                    await client.subscribe(self._topic("request_status"))
+                    await self._subscribe_command_topics(client)
 
                     commands_task = asyncio.create_task(self._command_loop(client))
                     events_task = asyncio.create_task(self._event_loop(client))
@@ -122,6 +129,7 @@ class MQTTBridge:
 
             try:
                 if topic == self._topic("send_sms/set"):
+                    _LOGGER.info("Received MQTT send_sms request on topic %s", topic)
                     recipients = self.gateway.resolve_recipient_numbers(
                         recipient=payload.get("recipient"),
                         recipient_id=payload.get("recipient_id"),
@@ -135,6 +143,7 @@ class MQTTBridge:
                     )
                     await self._publish_json(self._topic("result/send_sms"), result)
                 elif topic == self._topic("call/set"):
+                    _LOGGER.info("Received MQTT call request on topic %s", topic)
                     recipients = self.gateway.resolve_recipient_numbers(
                         recipient=payload.get("recipient"),
                         recipient_id=payload.get("recipient_id"),
@@ -147,11 +156,47 @@ class MQTTBridge:
                     )
                     await self._publish_json(self._topic("result/call"), result)
                 elif topic == self._topic("hangup/set"):
+                    _LOGGER.info("Received MQTT hangup request on topic %s", topic)
                     result = await self.gateway.async_hangup()
                     await self._publish_json(self._topic("result/hangup"), result)
                 elif topic == self._topic("request_status"):
                     await self._publish_snapshot()
+                elif topic == self._topic("control/sms_targets/set"):
+                    await self._update_control("sms_targets", self._payload_value(payload, payload_text))
+                elif topic == self._topic("control/sms_message/set"):
+                    await self._update_control("sms_message", self._payload_value(payload, payload_text))
+                elif topic == self._topic("control/sms_encoding/set"):
+                    await self._update_control(
+                        "sms_encoding",
+                        normalize_encoding(self._payload_value(payload, payload_text) or "auto"),
+                    )
+                elif topic == self._topic("control/call_targets/set"):
+                    await self._update_control("call_targets", self._payload_value(payload, payload_text))
+                elif topic == self._topic("control/call_ring_time/set"):
+                    ring_time = max(
+                        1,
+                        int(float(self._payload_value(payload, payload_text) or "1")),
+                    )
+                    await self._update_control("call_ring_time", str(ring_time))
+                elif topic == self._topic("action/send_sms/press"):
+                    result = await self._send_sms_from_controls()
+                    await self._publish_json(self._topic("result/send_sms"), result)
+                elif topic == self._topic("action/call/press"):
+                    result = await self._call_from_controls()
+                    await self._publish_json(self._topic("result/call"), result)
+                elif topic == self._topic("action/hangup/press"):
+                    result = await self.gateway.async_hangup()
+                    await self._publish_json(self._topic("result/hangup"), result)
+                elif self._is_saved_recipient_button(topic, "send_sms_to"):
+                    recipient_id = self._extract_saved_recipient_id(topic, "send_sms_to")
+                    result = await self._send_sms_from_controls(recipient_id=recipient_id)
+                    await self._publish_json(self._topic("result/send_sms"), result)
+                elif self._is_saved_recipient_button(topic, "call_to"):
+                    recipient_id = self._extract_saved_recipient_id(topic, "call_to")
+                    result = await self._call_from_controls(recipient_id=recipient_id)
+                    await self._publish_json(self._topic("result/call"), result)
             except Exception as err:
+                _LOGGER.warning("MQTT command on %s failed: %s", topic, err)
                 await self._publish_json(
                     self._topic("result/error"),
                     {"error": str(err), "source_topic": topic},
@@ -201,6 +246,74 @@ class MQTTBridge:
         await self._publish_availability(snapshot["available"])
         for role, value in snapshot["states"].items():
             await self._publish_state(role, value)
+
+    async def _publish_control_snapshot(self) -> None:
+        for key in self._controls:
+            await self._publish(self._topic(f"control/{key}/state"), self._controls[key], retain=True)
+
+    async def _subscribe_command_topics(self, client: Client) -> None:
+        topics = [
+            self._topic("send_sms/set"),
+            self._topic("call/set"),
+            self._topic("hangup/set"),
+            self._topic("request_status"),
+            self._topic("control/sms_targets/set"),
+            self._topic("control/sms_message/set"),
+            self._topic("control/sms_encoding/set"),
+            self._topic("control/call_targets/set"),
+            self._topic("control/call_ring_time/set"),
+            self._topic("action/send_sms/press"),
+            self._topic("action/call/press"),
+            self._topic("action/hangup/press"),
+            self._topic("action/send_sms_to/+/press"),
+            self._topic("action/call_to/+/press"),
+        ]
+        for topic in topics:
+            await client.subscribe(topic)
+
+    def _payload_value(self, payload: dict[str, Any], payload_text: str) -> str:
+        value = payload.get("value", payload_text)
+        return str(value or "").strip()
+
+    async def _update_control(self, key: str, value: str) -> None:
+        self._controls[key] = value
+        await self._publish(self._topic(f"control/{key}/state"), value, retain=True)
+
+    def _resolve_targets(self, raw_value: str) -> list[str]:
+        return self.gateway.resolve_recipient_input(raw_value)
+
+    async def _send_sms_from_controls(self, *, recipient_id: str | None = None) -> dict[str, Any]:
+        message = self._controls["sms_message"]
+        if not message:
+            raise RuntimeError("SMS message is empty.")
+        if recipient_id:
+            recipients = self.gateway.resolve_recipient_numbers(recipient_ids=[recipient_id])
+        else:
+            recipients = self._resolve_targets(self._controls["sms_targets"])
+        return await self.gateway.async_send_sms_batch(
+            message=message,
+            recipients=recipients,
+            encoding=self._controls["sms_encoding"],
+        )
+
+    async def _call_from_controls(self, *, recipient_id: str | None = None) -> dict[str, Any]:
+        ring_time = max(1, int(float(self._controls["call_ring_time"] or "1")))
+        if recipient_id:
+            recipients = self.gateway.resolve_recipient_numbers(recipient_ids=[recipient_id])
+        else:
+            recipients = self._resolve_targets(self._controls["call_targets"])
+        return await self.gateway.async_call_batch(
+            recipients=recipients,
+            ring_time_s=ring_time,
+        )
+
+    def _is_saved_recipient_button(self, topic: str, action: str) -> bool:
+        return bool(re.fullmatch(re.escape(self._topic(f"action/{action}/")) + r"[^/]+/press", topic))
+
+    def _extract_saved_recipient_id(self, topic: str, action: str) -> str:
+        prefix = self._topic(f"action/{action}/")
+        suffix = "/press"
+        return topic[len(prefix) : -len(suffix)]
 
     async def _publish_discovery(self) -> None:
         if not self.config.discovery_enabled:
@@ -280,7 +393,118 @@ class MQTTBridge:
                     "icon": "mdi:card-text",
                 },
             ),
+            (
+                "text",
+                "sms_targets",
+                {
+                    "name": "Q-Tronic SMS Targets",
+                    "state_topic": self._topic("control/sms_targets/state"),
+                    "command_topic": self._topic("control/sms_targets/set"),
+                    "icon": "mdi:account-multiple",
+                },
+            ),
+            (
+                "text",
+                "sms_message_input",
+                {
+                    "name": "Q-Tronic SMS Message Input",
+                    "state_topic": self._topic("control/sms_message/state"),
+                    "command_topic": self._topic("control/sms_message/set"),
+                    "icon": "mdi:message-text-edit",
+                },
+            ),
+            (
+                "select",
+                "sms_encoding",
+                {
+                    "name": "Q-Tronic SMS Encoding",
+                    "state_topic": self._topic("control/sms_encoding/state"),
+                    "command_topic": self._topic("control/sms_encoding/set"),
+                    "options": ["auto", "passthrough", "transliterate", "ucs2"],
+                    "icon": "mdi:alphabetical-variant",
+                },
+            ),
+            (
+                "button",
+                "send_sms",
+                {
+                    "name": "Q-Tronic Send SMS",
+                    "command_topic": self._topic("action/send_sms/press"),
+                    "payload_press": "PRESS",
+                    "icon": "mdi:send",
+                },
+            ),
+            (
+                "text",
+                "call_targets",
+                {
+                    "name": "Q-Tronic Call Targets",
+                    "state_topic": self._topic("control/call_targets/state"),
+                    "command_topic": self._topic("control/call_targets/set"),
+                    "icon": "mdi:phone-outgoing",
+                },
+            ),
+            (
+                "number",
+                "call_ring_time",
+                {
+                    "name": "Q-Tronic Call Ring Time",
+                    "state_topic": self._topic("control/call_ring_time/state"),
+                    "command_topic": self._topic("control/call_ring_time/set"),
+                    "min": 1,
+                    "max": 3600,
+                    "step": 1,
+                    "mode": "box",
+                    "icon": "mdi:timer-outline",
+                },
+            ),
+            (
+                "button",
+                "call",
+                {
+                    "name": "Q-Tronic Call",
+                    "command_topic": self._topic("action/call/press"),
+                    "payload_press": "PRESS",
+                    "icon": "mdi:phone",
+                },
+            ),
+            (
+                "button",
+                "hangup",
+                {
+                    "name": "Q-Tronic Hang Up",
+                    "command_topic": self._topic("action/hangup/press"),
+                    "payload_press": "PRESS",
+                    "icon": "mdi:phone-hangup",
+                },
+            ),
         ]
+
+        for recipient in self.gateway.saved_recipients:
+            discovery_items.extend(
+                [
+                    (
+                        "button",
+                        f"send_sms_to_{recipient.id}",
+                        {
+                            "name": f"Q-Tronic Send SMS to {recipient.name}",
+                            "command_topic": self._topic(f"action/send_sms_to/{recipient.id}/press"),
+                            "payload_press": "PRESS",
+                            "icon": "mdi:message-arrow-right",
+                        },
+                    ),
+                    (
+                        "button",
+                        f"call_to_{recipient.id}",
+                        {
+                            "name": f"Q-Tronic Call {recipient.name}",
+                            "command_topic": self._topic(f"action/call_to/{recipient.id}/press"),
+                            "payload_press": "PRESS",
+                            "icon": "mdi:phone-forward",
+                        },
+                    ),
+                ]
+            )
 
         availability = [{"topic": self._topic("status")}]
         for platform, object_id, payload in discovery_items:
@@ -293,5 +517,36 @@ class MQTTBridge:
                     "availability": availability,
                     "device": device,
                 }
+            )
+            await self._publish_json(discovery_topic, payload, retain=True)
+
+        trigger_items = [
+            (
+                "sms_received",
+                {
+                    "automation_type": "trigger",
+                    "platform": "device_automation",
+                    "topic": self._topic("event/sms_received"),
+                    "type": "received",
+                    "subtype": "sms",
+                    "device": device,
+                },
+            ),
+            (
+                "incoming_call",
+                {
+                    "automation_type": "trigger",
+                    "platform": "device_automation",
+                    "topic": self._topic("event/incoming_call"),
+                    "type": "received",
+                    "subtype": "call",
+                    "device": device,
+                },
+            ),
+        ]
+
+        for object_id, payload in trigger_items:
+            discovery_topic = (
+                f"{self.discovery_prefix}/device_automation/qtronic_sms_gateway/{object_id}/config"
             )
             await self._publish_json(discovery_topic, payload, retain=True)

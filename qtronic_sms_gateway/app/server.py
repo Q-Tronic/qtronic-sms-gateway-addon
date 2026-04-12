@@ -14,6 +14,7 @@ import uvicorn
 
 from qtronic_gateway.config import AddonConfig, load_config
 from qtronic_gateway.gateway import GatewayService
+from qtronic_gateway.homeassistant_bridge import HomeAssistantEventBridge
 from qtronic_gateway.mqtt_bridge import MQTTBridge
 
 _LOGGER = logging.getLogger("qtronic_sms_gateway.server")
@@ -31,6 +32,7 @@ class RuntimeState:
         self.config_error: str | None = None
         self.gateway: GatewayService | None = None
         self.mqtt: MQTTBridge | None = None
+        self.ha_events: HomeAssistantEventBridge | None = None
 
 
 runtime = RuntimeState()
@@ -342,6 +344,8 @@ async def lifespan(app: FastAPI):
         runtime.config = load_config(config_path)
         runtime.gateway = GatewayService(runtime.config)
         await runtime.gateway.async_start()
+        runtime.ha_events = HomeAssistantEventBridge(runtime.gateway)
+        await runtime.ha_events.start()
         runtime.mqtt = MQTTBridge(runtime.gateway)
         await runtime.mqtt.start()
         _LOGGER.info("Q-Tronic SMS Gateway runtime initialized successfully")
@@ -353,6 +357,8 @@ async def lifespan(app: FastAPI):
     finally:
         if runtime.mqtt is not None:
             await runtime.mqtt.stop()
+        if runtime.ha_events is not None:
+            await runtime.ha_events.stop()
         if runtime.gateway is not None:
             await runtime.gateway.async_stop()
 

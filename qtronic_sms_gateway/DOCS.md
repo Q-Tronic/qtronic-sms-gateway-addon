@@ -10,6 +10,7 @@
 - połączenie do węzła ESPHome po `Native API`
 - REST API dla przyszłej integracji
 - MQTT publish/subscribe w stylu bramki SMS
+- eventy Home Assistant dla triggerów automatyzacji
 
 ## Quick Start
 
@@ -37,6 +38,13 @@ Przykładowe topic prefixes:
 - subscribe send SMS: `<topic_prefix>/send_sms/set`
 - subscribe call: `<topic_prefix>/call/set`
 - subscribe hangup: `<topic_prefix>/hangup/set`
+- control state SMS targets: `<topic_prefix>/control/sms_targets/state`
+- control state SMS message: `<topic_prefix>/control/sms_message/state`
+- control state call targets: `<topic_prefix>/control/call_targets/state`
+- control state call ring time: `<topic_prefix>/control/call_ring_time/state`
+- action button send SMS: `<topic_prefix>/action/send_sms/press`
+- action button call: `<topic_prefix>/action/call/press`
+- action button hangup: `<topic_prefix>/action/hangup/press`
 
 Przykładowy payload `send_sms`:
 
@@ -70,6 +78,46 @@ Przydatne endpointy:
 - `POST /api/send-sms`
 - `POST /api/call`
 - `POST /api/hangup`
+
+## Home Assistant automations
+
+Add-on publikuje też eventy bezpośrednio do Home Assistant:
+
+- `qtronic_sms_gateway_sms_received`
+- `qtronic_sms_gateway_incoming_call`
+- `qtronic_sms_gateway_sms_sent`
+- `qtronic_sms_gateway_sms_batch_finished`
+- `qtronic_sms_gateway_call_batch_finished`
+
+Przykład triggera po SMS:
+
+```yaml
+triggers:
+  - trigger: event
+    event_type: qtronic_sms_gateway_sms_received
+    event_data:
+      saved_recipient_id: przemek
+      message_search: swiatlo
+```
+
+Przykład triggera po połączeniu:
+
+```yaml
+triggers:
+  - trigger: event
+    event_type: qtronic_sms_gateway_incoming_call
+    event_data:
+      saved_recipient_id: przemek
+```
+
+Jeśli chcesz sterować add-onem z automatyzacji bez custom integration, po MQTT discovery pojawią się też encje:
+
+- tekstowe pola dla SMS/call targets
+- pole wiadomości SMS
+- wybór kodowania SMS
+- czas dzwonienia
+- przyciski `Send SMS`, `Call`, `Hang Up`
+- dodatkowe przyciski `Send SMS to <recipient>` i `Call <recipient>` dla zapisanych odbiorców
 
 ## Saved Recipients
 

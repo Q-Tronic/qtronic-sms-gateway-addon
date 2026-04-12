@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0
+
+- Add detailed SMS and call logging in the add-on logs
+- Expose MQTT-discovered controls for sending SMS, calling, and hanging up from Home Assistant
+- Bridge inbound SMS and incoming call events back to the Home Assistant event bus for automations
+
 ## 0.1.3
 
 - Fix Alpine PEP 668 build failure by allowing pip installs in the add-on image

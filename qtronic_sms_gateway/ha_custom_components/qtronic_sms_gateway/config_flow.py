@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import json
+from pathlib import Path
 from typing import Any
 
 import voluptuous as vol
@@ -53,6 +55,7 @@ from .const import (
     DEFAULT_SEND_SMS_ACTION,
     DEFAULT_UNICODE_SEND_SMS_ACTION,
     DOMAIN,
+    RESTART_REQUIRED_MARKER,
     SMS_ENCODINGS,
 )
 from .hub import (
@@ -77,14 +80,18 @@ CONF_RECIPIENT_PHONE = "recipient_phone"
 CONF_RECIPIENT_ID = "recipient_id"
 
 
-def user_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
+def user_schema(
+    defaults: dict[str, Any] | None = None,
+    *,
+    suggested_host: str = DEFAULT_ADDON_HOSTNAME,
+) -> vol.Schema:
     """Build the setup form schema."""
     defaults = defaults or {}
     return vol.Schema(
         {
             vol.Required(
                 CONF_HOST,
-                default=defaults.get(CONF_HOST, DEFAULT_ADDON_HOSTNAME),
+                default=defaults.get(CONF_HOST, suggested_host),
             ): selector.TextSelector(),
             vol.Required(
                 CONF_PORT,
@@ -98,6 +105,17 @@ def user_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             ),
         }
     )
+
+
+def suggested_addon_host(config_dir: str | Path) -> str:
+    """Return the best-known add-on hostname saved by the sync step."""
+    marker_path = Path(config_dir) / "custom_components" / DOMAIN / RESTART_REQUIRED_MARKER
+    try:
+        payload = json.loads(marker_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return DEFAULT_ADDON_HOSTNAME
+    addon_hostname = payload.get("addon_hostname")
+    return str(addon_hostname).strip() if addon_hostname else DEFAULT_ADDON_HOSTNAME
 
 
 def messaging_schema(
@@ -410,7 +428,10 @@ class QTronicSmsGatewayConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
-            data_schema=user_schema(user_input),
+            data_schema=user_schema(
+                user_input,
+                suggested_host=suggested_addon_host(self.hass.config.config_dir),
+            ),
             errors=errors,
         )
 
@@ -446,7 +467,10 @@ class QTronicSmsGatewayConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=user_schema(user_input or dict(entry.data)),
+            data_schema=user_schema(
+                user_input or dict(entry.data),
+                suggested_host=suggested_addon_host(self.hass.config.config_dir),
+            ),
             errors=errors,
         )
 
@@ -533,7 +557,10 @@ class QTronicSmsGatewayOptionsFlow(OptionsFlow):
         }
         return self.async_show_form(
             step_id="connection",
-            data_schema=user_schema(user_input or defaults),
+            data_schema=user_schema(
+                user_input or defaults,
+                suggested_host=suggested_addon_host(self.hass.config.config_dir),
+            ),
             errors=errors,
         )
 

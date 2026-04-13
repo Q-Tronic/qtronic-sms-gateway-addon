@@ -93,6 +93,7 @@ def _write_restart_marker(source_version: str, previous_version: str | None) -> 
     payload = {
         "source_version": source_version,
         "previous_version": previous_version,
+        "addon_hostname": os.environ.get("HOSTNAME", "").strip(),
         "synced_at": datetime.now(timezone.utc).isoformat(),
     }
     MARKER_FILE.write_text(

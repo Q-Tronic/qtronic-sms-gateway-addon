@@ -215,7 +215,7 @@ Add-on jest teraz backendem i menedżerem integracji:
 - publikuje stany i zdarzenia
 - wystawia REST i MQTT jako warstwę komunikacji
 - automatycznie instaluje HTTP-backed `custom_component`, który przywraca klasyczne akcje HA
-- przy dodawaniu integracji domyślnie podpowiada host add-onu `qtronic_sms_gateway` i nie pokazuje już zbędnego pola `encryption_key`
+- przy dodawaniu integracji domyślnie podpowiada realny hostname add-onu zapisany podczas synchronizacji i nie pokazuje już zbędnego pola `encryption_key`
 
 ## Źródła
 

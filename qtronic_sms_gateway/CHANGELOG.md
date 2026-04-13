@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.3
+
+- Capture the real add-on hostname during component sync and use it as the suggested integration host
+- Bump the vendored custom integration to `0.6.3`
+
 ## 0.4.2
 
 - Remove the unused compatibility `encryption_key` field from the synced integration config flow

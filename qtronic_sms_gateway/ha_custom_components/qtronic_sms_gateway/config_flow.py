@@ -20,11 +20,11 @@ from .const import (
     CONF_CALL_STATE_OBJECT_ID,
     CONF_DEFAULT_RECIPIENT,
     CONF_DEFAULT_RECIPIENT_IDS,
+    DEFAULT_ADDON_HOSTNAME,
     CONF_DEFAULT_RING_TIME_S,
     CONF_DELAY_BETWEEN_CALLS_S,
     CONF_DIAL_ACTION,
     CONF_DISCONNECT_ACTION,
-    CONF_ENCRYPTION_KEY,
     CONF_EXPECTED_MAC,
     CONF_EXPECTED_NAME,
     CONF_INCOMING_CALL_OBJECT_ID,
@@ -82,7 +82,10 @@ def user_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
     defaults = defaults or {}
     return vol.Schema(
         {
-            vol.Required(CONF_HOST, default=defaults.get(CONF_HOST, "")): selector.TextSelector(),
+            vol.Required(
+                CONF_HOST,
+                default=defaults.get(CONF_HOST, DEFAULT_ADDON_HOSTNAME),
+            ): selector.TextSelector(),
             vol.Required(
                 CONF_PORT,
                 default=defaults.get(CONF_PORT, DEFAULT_PORT),
@@ -93,10 +96,6 @@ def user_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
                     mode=selector.NumberSelectorMode.BOX,
                 )
             ),
-            vol.Optional(
-                CONF_ENCRYPTION_KEY,
-                default=defaults.get(CONF_ENCRYPTION_KEY, ""),
-            ): selector.TextSelector(),
         }
     )
 
@@ -390,7 +389,6 @@ class QTronicSmsGatewayConfigFlow(ConfigFlow, domain=DOMAIN):
                     data={
                         CONF_HOST: user_input[CONF_HOST].strip(),
                         CONF_PORT: int(user_input[CONF_PORT]),
-                        CONF_ENCRYPTION_KEY: user_input.get(CONF_ENCRYPTION_KEY, "").strip(),
                         CONF_EXPECTED_NAME: device.name,
                         CONF_EXPECTED_MAC: normalize_mac(device.mac_address) or "",
                     },
@@ -425,7 +423,6 @@ class QTronicSmsGatewayConfigFlow(ConfigFlow, domain=DOMAIN):
             candidate = {
                 CONF_HOST: user_input[CONF_HOST].strip(),
                 CONF_PORT: int(user_input[CONF_PORT]),
-                CONF_ENCRYPTION_KEY: user_input.get(CONF_ENCRYPTION_KEY, "").strip(),
             }
             try:
                 device = await validate_gateway_connection(candidate)
@@ -508,7 +505,6 @@ class QTronicSmsGatewayOptionsFlow(OptionsFlow):
             candidate = {
                 CONF_HOST: user_input[CONF_HOST].strip(),
                 CONF_PORT: int(user_input[CONF_PORT]),
-                CONF_ENCRYPTION_KEY: user_input.get(CONF_ENCRYPTION_KEY, "").strip(),
             }
             try:
                 device = await validate_gateway_connection(candidate)
@@ -532,9 +528,8 @@ class QTronicSmsGatewayOptionsFlow(OptionsFlow):
                 )
 
         defaults = {
-            CONF_HOST: self.config_entry.data.get(CONF_HOST, ""),
+            CONF_HOST: self.config_entry.data.get(CONF_HOST, DEFAULT_ADDON_HOSTNAME),
             CONF_PORT: self.config_entry.data.get(CONF_PORT, DEFAULT_PORT),
-            CONF_ENCRYPTION_KEY: self.config_entry.data.get(CONF_ENCRYPTION_KEY, ""),
         }
         return self.async_show_form(
             step_id="connection",

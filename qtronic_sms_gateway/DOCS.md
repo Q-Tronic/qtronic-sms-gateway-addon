@@ -28,8 +28,9 @@
 3. Jeśli chcesz MQTT, włącz sekcję `MQTT` i ustaw broker.
 4. Uruchom add-on.
 5. Add-on zsynchronizuje `custom_component` do katalogu HA.
-6. Zrestartuj Home Assistant, jeśli chcesz od razu odzyskać akcje `send_sms` / `call_to`, encje `notify` i triggery `SMS/CALL`.
-7. Wejdź w `Otwórz interfejs użytkownika`.
+6. Jeśli restart jest wymagany, add-on zapisze znacznik, a integracja pokaże wpis `restart required` w ustawieniach Home Assistant.
+7. Zrestartuj Home Assistant, aby od razu odzyskać akcje `send_sms` / `call_to`, encje `notify` i triggery `SMS/CALL`.
+8. Wejdź w `Otwórz interfejs użytkownika`.
 
 ## MQTT
 
@@ -214,6 +215,7 @@ Add-on jest teraz backendem i menedżerem integracji:
 - publikuje stany i zdarzenia
 - wystawia REST i MQTT jako warstwę komunikacji
 - automatycznie instaluje HTTP-backed `custom_component`, który przywraca klasyczne akcje HA
+- przy dodawaniu integracji domyślnie podpowiada host add-onu `qtronic_sms_gateway` i nie pokazuje już zbędnego pola `encryption_key`
 
 ## Źródła
 

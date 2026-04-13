@@ -61,6 +61,7 @@ from .const import (
 )
 from .recipients import SavedRecipient, deduplicate_phone_numbers, load_saved_recipients
 from .recipients import mask_phone_number
+from .restart_issue import async_sync_restart_issue
 from .sms import normalize_encoding
 
 _LOGGER = logging.getLogger(__name__)
@@ -472,6 +473,7 @@ class QTronicSmsGatewayHub:
     async def async_start(self) -> None:
         self._stop_event.clear()
         _LOGGER.info("Q-Tronic integration using add-on backend at %s", self.addon_base_url)
+        await async_sync_restart_issue(self.hass)
         await self._async_refresh_status(require_success=True)
         self._poll_task = asyncio.create_task(self._poll_loop())
 
@@ -552,6 +554,7 @@ class QTronicSmsGatewayHub:
         while not self._stop_event.is_set():
             try:
                 await asyncio.sleep(POLL_INTERVAL_S)
+                await async_sync_restart_issue(self.hass)
                 await self._async_refresh_status(require_success=False)
             except asyncio.CancelledError:
                 raise

@@ -3,20 +3,18 @@
     "step": {
       "user": {
         "title": "Add Q-Tronic SMS Gateway",
-        "description": "Connect Home Assistant directly to your Q-Tronic SMS Gateway over the ESPHome native API.",
+        "description": "Connect Home Assistant to the local Q-Tronic SMS Gateway add-on over HTTP.",
         "data": {
-          "host": "ESPHome device IP or hostname",
-          "port": "ESPHome API port",
-          "encryption_key": "ESPHome API encryption key"
+          "host": "Home Assistant host or add-on hostname",
+          "port": "Q-Tronic add-on HTTP port"
         }
       },
       "reconfigure": {
         "title": "Reconfigure Q-Tronic SMS Gateway",
-        "description": "Update the connection settings for the ESPHome device.",
+        "description": "Update the connection settings for the Q-Tronic add-on backend.",
         "data": {
-          "host": "ESPHome device IP or hostname",
-          "port": "ESPHome API port",
-          "encryption_key": "ESPHome API encryption key"
+          "host": "Home Assistant host or add-on hostname",
+          "port": "Q-Tronic add-on HTTP port"
         }
       }
     },
@@ -44,12 +42,11 @@
         }
       },
       "connection": {
-        "title": "ESPHome connection",
-        "description": "Change the ESPHome host, port, or encryption key.",
+        "title": "Add-on backend connection",
+        "description": "Change the host, port, or compatibility token used for the Q-Tronic add-on.",
         "data": {
-          "host": "ESPHome device IP or hostname",
-          "port": "ESPHome API port",
-          "encryption_key": "ESPHome API encryption key"
+          "host": "Home Assistant host or add-on hostname",
+          "port": "Q-Tronic add-on HTTP port"
         }
       },
       "messaging": {
@@ -195,6 +192,12 @@
     "trigger_type": {
       "sms_received": "SMS received",
       "incoming_call": "Incoming call"
+    }
+  },
+  "issues": {
+    "restart_required": {
+      "title": "Restart Home Assistant to finish updating Q-Tronic SMS Gateway",
+      "description": "The Q-Tronic SMS Gateway add-on synchronized a new custom integration version (`{synced_version}`) into `/config/custom_components`, but Home Assistant is still running version `{current_version}`. Restart Home Assistant Core to load the updated integration and restore actions like `qtronic_sms_gateway.send_sms` / `qtronic_sms_gateway.call_to`.\n\nPrevious synced version: `{previous_version}`."
     }
   }
 }

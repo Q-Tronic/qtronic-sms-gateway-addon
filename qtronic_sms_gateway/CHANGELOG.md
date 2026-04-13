@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.2
+
+- Remove the unused compatibility `encryption_key` field from the synced integration config flow
+- Pre-fill the integration host with the add-on hostname `qtronic_sms_gateway`
+- Bump the vendored custom integration to `0.6.2`
+
+## 0.4.1
+
+- Write a restart-required marker after syncing the vendored custom component
+- Let the synced integration surface a native Home Assistant repair issue when a core restart is required
+- Update the synced integration metadata and translations for the add-on HTTP backend flow
+
 ## 0.4.0
 
 - Vendor the `qtronic_sms_gateway` custom integration inside the add-on image

@@ -5,6 +5,8 @@ from __future__ import annotations
 from homeassistant.const import CONF_HOST, CONF_PORT
 
 DOMAIN = "qtronic_sms_gateway"
+ISSUE_ID_RESTART_REQUIRED = "restart_required_after_addon_sync"
+RESTART_REQUIRED_MARKER = ".addon_sync_state.json"
 
 CONF_ENCRYPTION_KEY = "encryption_key"
 CONF_CONFIG_ENTRY_ID = "config_entry_id"
@@ -44,6 +46,7 @@ ATTR_PHONE_NUMBER = "phone_number"
 ATTR_MESSAGE_SEARCH = "message_search"
 
 DEFAULT_PORT = 8099
+DEFAULT_ADDON_HOSTNAME = "qtronic_sms_gateway"
 DEFAULT_SEND_SMS_ACTION = "send_sms"
 DEFAULT_UNICODE_SEND_SMS_ACTION = "send_sms_unicode"
 DEFAULT_DIAL_ACTION = "dial"

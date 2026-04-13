@@ -30,6 +30,7 @@ from .const import (
 )
 from .hub import GatewayAuthenticationError, GatewayConnectionError, QTronicSmsGatewayHub
 from .recipients import deduplicate_phone_numbers, mask_phone_number
+from .restart_issue import async_sync_restart_issue
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -186,6 +187,7 @@ def _resolve_targets_for_service(
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up the integration from YAML."""
+    await async_sync_restart_issue(hass)
     if not hass.services.has_service(DOMAIN, SERVICE_SEND_SMS):
         hass.services.async_register(
             DOMAIN,
@@ -205,6 +207,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Q-Tronic SMS Gateway from a config entry."""
+    await async_sync_restart_issue(hass)
     hub = QTronicSmsGatewayHub(hass, entry)
     try:
         await hub.async_start()

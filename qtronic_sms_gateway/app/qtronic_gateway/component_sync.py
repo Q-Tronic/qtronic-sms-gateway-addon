@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import json
 import logging
 import os
@@ -21,6 +22,7 @@ SOURCE_COMPONENT = Path(
 TARGET_CONFIG_ROOT = Path(os.environ.get("QTRONIC_HA_CONFIG_DIR", "/homeassistant"))
 TARGET_COMPONENT = TARGET_CONFIG_ROOT / "custom_components" / "qtronic_sms_gateway"
 TEMP_COMPONENT = TARGET_CONFIG_ROOT / "custom_components" / ".qtronic_sms_gateway.tmp"
+MARKER_FILE = TARGET_COMPONENT / ".addon_sync_state.json"
 NOTIFICATION_URL = "http://supervisor/core/api/services/persistent_notification/create"
 NOTIFICATION_ID = "qtronic_sms_gateway_component_sync"
 REQUIRED_FILES = (
@@ -87,6 +89,23 @@ def _send_restart_notification(source_version: str, previous_version: str | None
         _LOGGER.warning("Failed to create restart notification in Home Assistant: %s", err)
 
 
+def _write_restart_marker(source_version: str, previous_version: str | None) -> None:
+    payload = {
+        "source_version": source_version,
+        "previous_version": previous_version,
+        "synced_at": datetime.now(timezone.utc).isoformat(),
+    }
+    MARKER_FILE.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _remove_restart_marker() -> None:
+    if MARKER_FILE.exists():
+        MARKER_FILE.unlink()
+
+
 def sync_custom_component() -> dict[str, object]:
     """Copy the vendored integration into Home Assistant's config directory."""
     if not SOURCE_COMPONENT.exists():
@@ -120,7 +139,10 @@ def sync_custom_component() -> dict[str, object]:
     )
 
     if needs_restart_notice:
+        _write_restart_marker(source_version, previous_version)
         _send_restart_notification(source_version, previous_version)
+    else:
+        _remove_restart_marker()
 
     return {
         "source_version": source_version,

@@ -3,20 +3,18 @@
     "step": {
       "user": {
         "title": "Dodaj Q-Tronic SMS Gateway",
-        "description": "Połącz Home Assistanta bezpośrednio z Q-Tronic SMS Gateway przez natywne API ESPHome.",
+        "description": "Połącz Home Assistanta z lokalnym add-onem Q-Tronic SMS Gateway przez HTTP.",
         "data": {
-          "host": "Adres IP lub hostname urządzenia ESPHome",
-          "port": "Port API ESPHome",
-          "encryption_key": "Klucz szyfrowania API ESPHome"
+          "host": "Adres hosta Home Assistant lub hostname add-onu",
+          "port": "Port HTTP add-onu Q-Tronic"
         }
       },
       "reconfigure": {
         "title": "Skonfiguruj ponownie Q-Tronic SMS Gateway",
-        "description": "Zmień ustawienia połączenia do urządzenia ESPHome.",
+        "description": "Zmień ustawienia połączenia do backendu add-onu Q-Tronic.",
         "data": {
-          "host": "Adres IP lub hostname urządzenia ESPHome",
-          "port": "Port API ESPHome",
-          "encryption_key": "Klucz szyfrowania API ESPHome"
+          "host": "Adres hosta Home Assistant lub hostname add-onu",
+          "port": "Port HTTP add-onu Q-Tronic"
         }
       }
     },
@@ -44,12 +42,11 @@
         }
       },
       "connection": {
-        "title": "Połączenie z ESPHome",
-        "description": "Zmień adres, port lub klucz szyfrowania ESPHome.",
+        "title": "Połączenie z backendem add-onu",
+        "description": "Zmień host, port lub zgodnościowy token używany do backendu add-onu Q-Tronic.",
         "data": {
-          "host": "Adres IP lub hostname urządzenia ESPHome",
-          "port": "Port API ESPHome",
-          "encryption_key": "Klucz szyfrowania API ESPHome"
+          "host": "Adres hosta Home Assistant lub hostname add-onu",
+          "port": "Port HTTP add-onu Q-Tronic"
         }
       },
       "messaging": {
@@ -195,6 +192,12 @@
     "trigger_type": {
       "sms_received": "SMS odebrany",
       "incoming_call": "Połączenie przychodzące"
+    }
+  },
+  "issues": {
+    "restart_required": {
+      "title": "Uruchom ponownie Home Assistant, aby dokończyć aktualizację Q-Tronic SMS Gateway",
+      "description": "Add-on Q-Tronic SMS Gateway zsynchronizował nową wersję integracji (`{synced_version}`) do `/config/custom_components`, ale Home Assistant nadal działa na wersji `{current_version}`. Uruchom ponownie Home Assistant Core, aby załadować zaktualizowaną integrację i przywrócić akcje `qtronic_sms_gateway.send_sms` / `qtronic_sms_gateway.call_to`.\n\nPoprzednio zsynchronizowana wersja: `{previous_version}`."
     }
   }
 }

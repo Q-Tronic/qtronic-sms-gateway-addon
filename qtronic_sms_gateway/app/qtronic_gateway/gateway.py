@@ -54,6 +54,8 @@ from .sms import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+SMS_EVENT_DEBOUNCE_S = 2.0
+INCOMING_CALL_EVENT_DEBOUNCE_S = 5.0
 
 AUTH_ERRORS = (
     RequiresEncryptionAPIError,
@@ -172,6 +174,10 @@ class GatewayService:
         self._last_connect_error: str | None = None
         self._last_sms_batch = SmsBatchDiagnostics()
         self._last_call_batch = CallBatchDiagnostics()
+        self._last_sms_signature: str | None = None
+        self._last_sms_event_at = 0.0
+        self._last_incoming_call_signature: str | None = None
+        self._last_incoming_call_event_at = 0.0
 
     @property
     def host(self) -> str:
@@ -959,7 +965,6 @@ class GatewayService:
 
     def _handle_state_callback(self, state: EntityState) -> None:
         role = self.role_for_state_key(state.key)
-        previous_state = self.states.get(state.key)
         self.states[state.key] = state
         self._state_version += 1
         self._state_event.set()
@@ -979,35 +984,74 @@ class GatewayService:
 
         if role == ROLE_SMS_MESSAGE:
             message = state_as_text(state)
-            previous_message = state_as_text(previous_state)
             sender = state_as_text(self.state_for_role(ROLE_SMS_SENDER))
-            if message and sender and message != previous_message:
+            if message and sender:
                 saved = self.recipient_for_phone(sender)
-                self._dispatch_event(
-                    "sms_received",
-                    {
-                        "sender": sender,
-                        "sender_normalized": phone_match_key(sender),
-                        "saved_recipient_id": saved.id if saved else None,
-                        "saved_recipient_name": saved.name if saved else None,
-                        "message": message,
-                        "message_search": normalize_inbound_text(message),
-                    },
+                sender_key = phone_match_key(sender)
+                message_search = normalize_inbound_text(message)
+                signature = f"{sender_key}|{message_search}"
+                now = time()
+                if (
+                    signature == self._last_sms_signature
+                    and now - self._last_sms_event_at < SMS_EVENT_DEBOUNCE_S
+                ):
+                    _LOGGER.info(
+                        "SMS event suppressed for %s due to %ss debounce window",
+                        saved.name if saved else sender,
+                        SMS_EVENT_DEBOUNCE_S,
+                    )
+                    return
+
+                self._last_sms_signature = signature
+                self._last_sms_event_at = now
+                payload = {
+                    "sender": sender,
+                    "sender_normalized": sender_key,
+                    "saved_recipient_id": saved.id if saved else None,
+                    "saved_recipient_name": saved.name if saved else None,
+                    "message": message,
+                    "message_search": message_search,
+                }
+                _LOGGER.info(
+                    "SMS event emitted: sender=%s normalized=%s saved_recipient_id=%s message_search=%s",
+                    sender,
+                    sender_key,
+                    payload["saved_recipient_id"],
+                    message_search,
                 )
+                self._dispatch_event("sms_received", payload)
         elif role == ROLE_INCOMING_CALL:
             caller = state_as_text(state)
-            previous_caller = state_as_text(previous_state)
-            if caller and caller != previous_caller:
+            if caller:
                 saved = self.recipient_for_phone(caller)
-                self._dispatch_event(
-                    "incoming_call",
-                    {
-                        "caller": caller,
-                        "caller_normalized": phone_match_key(caller),
-                        "saved_recipient_id": saved.id if saved else None,
-                        "saved_recipient_name": saved.name if saved else None,
-                    },
+                signature = phone_match_key(caller) or caller
+                now = time()
+                if (
+                    signature == self._last_incoming_call_signature
+                    and now - self._last_incoming_call_event_at < INCOMING_CALL_EVENT_DEBOUNCE_S
+                ):
+                    _LOGGER.info(
+                        "Incoming call event suppressed for %s due to %ss debounce window",
+                        saved.name if saved else caller,
+                        INCOMING_CALL_EVENT_DEBOUNCE_S,
+                    )
+                    return
+
+                self._last_incoming_call_signature = signature
+                self._last_incoming_call_event_at = now
+                payload = {
+                    "caller": caller,
+                    "caller_normalized": signature,
+                    "saved_recipient_id": saved.id if saved else None,
+                    "saved_recipient_name": saved.name if saved else None,
+                }
+                _LOGGER.info(
+                    "Incoming call event emitted: caller=%s normalized=%s saved_recipient_id=%s",
+                    caller,
+                    signature,
+                    payload["saved_recipient_id"],
                 )
+                self._dispatch_event("incoming_call", payload)
 
     def _detect_roles(self, entities: list[EntityInfo]) -> dict[str, int]:
         overrides = {

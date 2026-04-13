@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.6
+
+- Re-emit `incoming_call` events for repeated calls from the same number instead of requiring the sensor text to change
+- Re-emit `sms_received` events for repeated identical SMS messages instead of requiring the message sensor text to change
+- Add inbound SMS and call debounce logs so duplicate suppression is visible in add-on logs
+
 ## 0.4.5
 
 - Make the `Konfiguracja` card span the full dashboard row

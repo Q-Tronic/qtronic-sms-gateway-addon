@@ -1,0 +1,200 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add Q-Tronic SMS Gateway",
+        "description": "Connect Home Assistant directly to your Q-Tronic SMS Gateway over the ESPHome native API.",
+        "data": {
+          "host": "ESPHome device IP or hostname",
+          "port": "ESPHome API port",
+          "encryption_key": "ESPHome API encryption key"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Q-Tronic SMS Gateway",
+        "description": "Update the connection settings for the ESPHome device.",
+        "data": {
+          "host": "ESPHome device IP or hostname",
+          "port": "ESPHome API port",
+          "encryption_key": "ESPHome API encryption key"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to the ESPHome device.",
+      "invalid_auth": "The ESPHome API encryption key is invalid."
+    },
+    "abort": {
+      "already_configured": "This Q-Tronic SMS Gateway is already configured.",
+      "reconfigure_successful": "The Q-Tronic SMS Gateway configuration has been updated."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Q-Tronic SMS Gateway options",
+        "description": "Choose what you want to configure. Saved recipients: {recipient_count}.",
+        "menu_options": {
+          "connection": "ESPHome connection",
+          "messaging": "SMS sending",
+          "calling": "Calling",
+          "recipients": "Saved recipients",
+          "entity_mapping": "Entity mapping",
+          "finish": "Save and close"
+        }
+      },
+      "connection": {
+        "title": "ESPHome connection",
+        "description": "Change the ESPHome host, port, or encryption key.",
+        "data": {
+          "host": "ESPHome device IP or hostname",
+          "port": "ESPHome API port",
+          "encryption_key": "ESPHome API encryption key"
+        }
+      },
+      "messaging": {
+        "title": "SMS sending",
+        "description": "Configure default recipients, encoding, and the delay between SMS sends.\n\nCurrent recipients:\n{recipients}",
+        "data": {
+          "default_recipient_ids": "Default saved recipients",
+          "default_recipient": "Default manual recipient",
+          "send_sms_action": "ESPHome action name for sending SMS",
+          "unicode_send_sms_action": "ESPHome action name for Unicode SMS",
+          "sms_encoding": "Default SMS encoding",
+          "send_delay_ms": "Delay between SMS sends [ms]"
+        }
+      },
+      "calling": {
+        "title": "Calling",
+        "description": "Configure the ESPHome dial/disconnect actions, ring time, and retry/fallback policy for calls that do not connect.",
+        "data": {
+          "dial_action": "ESPHome action name for starting a call",
+          "disconnect_action": "ESPHome action name for disconnecting a call",
+          "default_ring_time_s": "Default ring time [s]",
+          "delay_between_calls_s": "Delay between calls [s]",
+          "call_max_retries": "Retries for the same number",
+          "call_retry_delay_s": "Delay between retries [s]",
+          "call_retry_forever": "Retry until connected",
+          "call_failure_action": "What to do after retries are exhausted"
+        }
+      },
+      "recipients": {
+        "title": "Saved recipients",
+        "description": "Current recipients:\n{recipients}",
+        "menu_options": {
+          "add_recipient": "Add recipient",
+          "edit_recipient_select": "Edit recipient",
+          "delete_recipients": "Delete recipients",
+          "init": "Back to main menu"
+        }
+      },
+      "add_recipient": {
+        "title": "Add recipient",
+        "description": "Add a new saved SMS recipient.",
+        "data": {
+          "recipient_name": "Recipient name",
+          "recipient_phone": "Phone number"
+        }
+      },
+      "edit_recipient_select": {
+        "title": "Select recipient to edit",
+        "description": "Choose the saved recipient you want to edit.",
+        "data": {
+          "recipient_id": "Recipient"
+        }
+      },
+      "edit_recipient": {
+        "title": "Edit recipient",
+        "description": "Update the selected recipient name or phone number.",
+        "data": {
+          "recipient_name": "Recipient name",
+          "recipient_phone": "Phone number"
+        }
+      },
+      "delete_recipients": {
+        "title": "Delete recipients",
+        "description": "Choose one or more recipients to remove.",
+        "data": {
+          "recipient_id": "Recipients to delete"
+        }
+      },
+      "entity_mapping": {
+        "title": "Entity mapping",
+        "description": "Optionally override the object_id values used to auto-detect ESPHome entities.",
+        "data": {
+          "rssi_object_id": "RSSI object_id override",
+          "registered_object_id": "Registered object_id override",
+          "sms_sender_object_id": "SMS sender object_id override",
+          "sms_message_object_id": "SMS message object_id override",
+          "incoming_call_object_id": "Incoming call object_id override",
+          "call_state_object_id": "Call state object_id override",
+          "ussd_object_id": "USSD object_id override"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to the ESPHome device.",
+      "invalid_auth": "The ESPHome API encryption key is invalid.",
+      "invalid_recipient": "Check the recipient name and phone number."
+    },
+    "abort": {
+      "no_saved_recipients": "There are no saved recipients for this action."
+    }
+  },
+  "services": {
+    "send_sms": {
+      "name": "Send SMS",
+      "description": "Send an SMS using the configured Q-Tronic SMS Gateway.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Config entry ID",
+          "description": "Leave empty if only one gateway is configured."
+        },
+        "saved_recipients": {
+          "name": "Saved recipients",
+          "description": "Select one or more saved recipients configured in Q-Tronic SMS Gateway."
+        },
+        "recipient": {
+          "name": "Manual recipient",
+          "description": "Optional phone number in international format. Use this only for numbers not saved in the integration."
+        },
+        "encoding": {
+          "name": "Encoding",
+          "description": "Use auto, passthrough, transliterate, or ucs2."
+        },
+        "message": {
+          "name": "Message",
+          "description": "SMS text to send."
+        }
+      }
+    },
+    "call_to": {
+      "name": "Call To",
+      "description": "Place one or more outbound calls using the configured Q-Tronic SMS Gateway.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Config entry ID",
+          "description": "Leave empty if only one gateway is configured."
+        },
+        "saved_recipients": {
+          "name": "Saved recipients",
+          "description": "Select one or more saved recipients configured in Q-Tronic SMS Gateway."
+        },
+        "recipient": {
+          "name": "Manual recipient",
+          "description": "Optional phone number in international format. Use this only for numbers not saved in the integration."
+        },
+        "ring_time_s": {
+          "name": "Ring time [s]",
+          "description": "How long the modem should keep dialing before it disconnects the call."
+        }
+      }
+    }
+  },
+  "device_automation": {
+    "trigger_type": {
+      "sms_received": "SMS received",
+      "incoming_call": "Incoming call"
+    }
+  }
+}

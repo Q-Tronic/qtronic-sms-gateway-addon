@@ -1,0 +1,200 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Dodaj Q-Tronic SMS Gateway",
+        "description": "Połącz Home Assistanta bezpośrednio z Q-Tronic SMS Gateway przez natywne API ESPHome.",
+        "data": {
+          "host": "Adres IP lub hostname urządzenia ESPHome",
+          "port": "Port API ESPHome",
+          "encryption_key": "Klucz szyfrowania API ESPHome"
+        }
+      },
+      "reconfigure": {
+        "title": "Skonfiguruj ponownie Q-Tronic SMS Gateway",
+        "description": "Zmień ustawienia połączenia do urządzenia ESPHome.",
+        "data": {
+          "host": "Adres IP lub hostname urządzenia ESPHome",
+          "port": "Port API ESPHome",
+          "encryption_key": "Klucz szyfrowania API ESPHome"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Nie udało się połączyć z urządzeniem ESPHome.",
+      "invalid_auth": "Klucz szyfrowania API ESPHome jest nieprawidłowy."
+    },
+    "abort": {
+      "already_configured": "Ta integracja Q-Tronic SMS Gateway jest już skonfigurowana.",
+      "reconfigure_successful": "Konfiguracja Q-Tronic SMS Gateway została zaktualizowana."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opcje Q-Tronic SMS Gateway",
+        "description": "Wybierz sekcję do konfiguracji. Zapisani odbiorcy: {recipient_count}.",
+        "menu_options": {
+          "connection": "Połączenie z ESPHome",
+          "messaging": "Wysyłka SMS",
+          "calling": "Połączenia",
+          "recipients": "Odbiorcy zapisani",
+          "entity_mapping": "Mapowanie encji",
+          "finish": "Zapisz i zamknij"
+        }
+      },
+      "connection": {
+        "title": "Połączenie z ESPHome",
+        "description": "Zmień adres, port lub klucz szyfrowania ESPHome.",
+        "data": {
+          "host": "Adres IP lub hostname urządzenia ESPHome",
+          "port": "Port API ESPHome",
+          "encryption_key": "Klucz szyfrowania API ESPHome"
+        }
+      },
+      "messaging": {
+        "title": "Wysyłka SMS",
+        "description": "Skonfiguruj domyślnych odbiorców, kodowanie i odstęp między SMS-ami.\n\nAktualni odbiorcy:\n{recipients}",
+        "data": {
+          "default_recipient_ids": "Domyślni zapisani odbiorcy",
+          "default_recipient": "Domyślny ręczny odbiorca",
+          "send_sms_action": "Nazwa akcji ESPHome do wysyłki SMS",
+          "unicode_send_sms_action": "Nazwa akcji ESPHome do SMS Unicode",
+          "sms_encoding": "Domyślne kodowanie SMS",
+          "send_delay_ms": "Odstęp między SMS-ami [ms]"
+        }
+      },
+      "calling": {
+        "title": "Połączenia",
+        "description": "Skonfiguruj akcje ESPHome do wybierania numeru, czas dzwonienia oraz politykę retry/fallback dla niepołączonych połączeń.",
+        "data": {
+          "dial_action": "Nazwa akcji ESPHome do rozpoczęcia połączenia",
+          "disconnect_action": "Nazwa akcji ESPHome do rozłączenia połączenia",
+          "default_ring_time_s": "Domyślny czas dzwonienia [s]",
+          "delay_between_calls_s": "Odstęp między połączeniami [s]",
+          "call_max_retries": "Liczba ponowień dla tego samego numeru",
+          "call_retry_delay_s": "Odstęp między ponowieniami [s]",
+          "call_retry_forever": "Dzwonij do skutku",
+          "call_failure_action": "Co zrobić po wyczerpaniu ponowień"
+        }
+      },
+      "recipients": {
+        "title": "Odbiorcy zapisani",
+        "description": "Aktualna lista odbiorców:\n{recipients}",
+        "menu_options": {
+          "add_recipient": "Dodaj odbiorcę",
+          "edit_recipient_select": "Edytuj odbiorcę",
+          "delete_recipients": "Usuń odbiorców",
+          "init": "Wróć do menu głównego"
+        }
+      },
+      "add_recipient": {
+        "title": "Dodaj odbiorcę",
+        "description": "Dodaj nowego zapisanego odbiorcę SMS.",
+        "data": {
+          "recipient_name": "Nazwa użytkownika",
+          "recipient_phone": "Numer telefonu"
+        }
+      },
+      "edit_recipient_select": {
+        "title": "Wybierz odbiorcę do edycji",
+        "description": "Wskaż zapisanego odbiorcę, którego chcesz zmienić.",
+        "data": {
+          "recipient_id": "Odbiorca"
+        }
+      },
+      "edit_recipient": {
+        "title": "Edytuj odbiorcę",
+        "description": "Zmień nazwę lub numer telefonu wybranego odbiorcy.",
+        "data": {
+          "recipient_name": "Nazwa użytkownika",
+          "recipient_phone": "Numer telefonu"
+        }
+      },
+      "delete_recipients": {
+        "title": "Usuń odbiorców",
+        "description": "Wybierz jednego lub więcej odbiorców do usunięcia.",
+        "data": {
+          "recipient_id": "Odbiorcy do usunięcia"
+        }
+      },
+      "entity_mapping": {
+        "title": "Mapowanie encji",
+        "description": "Opcjonalnie nadpisz object_id używane do autodetekcji encji ESPHome.",
+        "data": {
+          "rssi_object_id": "Nadpisanie object_id dla RSSI",
+          "registered_object_id": "Nadpisanie object_id dla Registered",
+          "sms_sender_object_id": "Nadpisanie object_id dla nadawcy SMS",
+          "sms_message_object_id": "Nadpisanie object_id dla treści SMS",
+          "incoming_call_object_id": "Nadpisanie object_id dla połączenia przychodzącego",
+          "call_state_object_id": "Nadpisanie object_id dla stanu połączenia",
+          "ussd_object_id": "Nadpisanie object_id dla USSD"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Nie udało się połączyć z urządzeniem ESPHome.",
+      "invalid_auth": "Klucz szyfrowania API ESPHome jest nieprawidłowy.",
+      "invalid_recipient": "Sprawdź nazwę i numer telefonu odbiorcy."
+    },
+    "abort": {
+      "no_saved_recipients": "Brak zapisanych odbiorców do tej operacji."
+    }
+  },
+  "services": {
+    "send_sms": {
+      "name": "Wyślij SMS",
+      "description": "Wyślij SMS przez skonfigurowaną integrację Q-Tronic SMS Gateway.",
+      "fields": {
+        "config_entry_id": {
+          "name": "ID wpisu konfiguracyjnego",
+          "description": "Zostaw puste, jeśli masz tylko jedną bramkę."
+        },
+        "saved_recipients": {
+          "name": "Odbiorcy zapisani",
+          "description": "Wybierz jednego lub więcej zapisanych odbiorców skonfigurowanych w Q-Tronic SMS Gateway."
+        },
+        "recipient": {
+          "name": "Odbiorca ręczny",
+          "description": "Opcjonalny numer telefonu w formacie międzynarodowym. Użyj tylko dla numerów nie zapisanych w integracji."
+        },
+        "encoding": {
+          "name": "Kodowanie",
+          "description": "Użyj auto, passthrough, transliterate albo ucs2."
+        },
+        "message": {
+          "name": "Wiadomość",
+          "description": "Treść SMS-a."
+        }
+      }
+    },
+    "call_to": {
+      "name": "Zadzwoń",
+      "description": "Wykonaj połączenie przez skonfigurowaną integrację Q-Tronic SMS Gateway.",
+      "fields": {
+        "config_entry_id": {
+          "name": "ID wpisu konfiguracyjnego",
+          "description": "Zostaw puste, jeśli masz tylko jedną bramkę."
+        },
+        "saved_recipients": {
+          "name": "Odbiorcy zapisani",
+          "description": "Wybierz jednego lub więcej zapisanych odbiorców skonfigurowanych w Q-Tronic SMS Gateway."
+        },
+        "recipient": {
+          "name": "Odbiorca ręczny",
+          "description": "Opcjonalny numer telefonu w formacie międzynarodowym. Użyj tylko dla numerów nie zapisanych w integracji."
+        },
+        "ring_time_s": {
+          "name": "Czas dzwonienia [s]",
+          "description": "Jak długo modem ma wybierać numer, zanim rozłączy połączenie."
+        }
+      }
+    }
+  },
+  "device_automation": {
+    "trigger_type": {
+      "sms_received": "SMS odebrany",
+      "incoming_call": "Połączenie przychodzące"
+    }
+  }
+}

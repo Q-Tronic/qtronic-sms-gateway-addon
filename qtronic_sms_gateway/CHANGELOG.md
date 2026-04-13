@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- Vendor the `qtronic_sms_gateway` custom integration inside the add-on image
+- Automatically synchronize the custom component into `/config/custom_components/qtronic_sms_gateway` on add-on startup
+- Request writable access to Home Assistant config so the add-on can restore the HTTP-backed integration UX
+- Create a Home Assistant notification when the synced custom component requires a core restart
+
 ## 0.3.1
 
 - Fix Ingress frontend API URLs by building them from the actual Home Assistant ingress `root_path`

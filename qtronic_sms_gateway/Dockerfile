@@ -18,6 +18,7 @@ RUN apk add --no-cache \
     bash
 
 COPY app /app
+COPY ha_custom_components /opt/qtronic/ha_custom_components
 COPY run.sh /run.sh
 
 RUN pip3 install --no-cache-dir --break-system-packages \

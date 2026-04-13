@@ -1,0 +1,78 @@
+send_sms:
+  name: Send SMS
+  description: Send an SMS using the configured Q-Tronic SMS Gateway.
+  fields:
+    config_entry_id:
+      name: Config entry ID
+      description: Leave empty if only one Q-Tronic SMS Gateway is configured.
+      advanced: true
+      selector:
+        text:
+    saved_recipients:
+      name: Saved recipients
+      description: Select one or more saved recipients from Q-Tronic SMS Gateway.
+      selector:
+        entity:
+          multiple: true
+          filter:
+            - integration: qtronic_sms_gateway
+              domain: notify
+    recipient:
+      name: Manual recipient
+      description: Optional phone number in international format. Use this only for ad-hoc numbers that are not saved in the gateway.
+      advanced: true
+      selector:
+        text:
+    encoding:
+      name: Encoding
+      description: "Use auto, passthrough, transliterate, or ucs2. Auto picks UCS2 when the Unicode ESPHome action is available; otherwise it transliterates unsupported characters."
+      advanced: true
+      selector:
+        select:
+          options:
+            - auto
+            - passthrough
+            - transliterate
+            - ucs2
+    message:
+      name: Message
+      description: SMS body text.
+      required: true
+      selector:
+        text:
+          multiline: true
+
+call_to:
+  name: Call To
+  description: Place one or more outbound calls using the configured Q-Tronic SMS Gateway.
+  fields:
+    config_entry_id:
+      name: Config entry ID
+      description: Leave empty if only one Q-Tronic SMS Gateway is configured.
+      advanced: true
+      selector:
+        text:
+    saved_recipients:
+      name: Saved recipients
+      description: Select one or more saved recipients from Q-Tronic SMS Gateway.
+      selector:
+        entity:
+          multiple: true
+          filter:
+            - integration: qtronic_sms_gateway
+              domain: notify
+    recipient:
+      name: Manual recipient
+      description: Optional phone number in international format. Use this only for ad-hoc numbers that are not saved in the gateway.
+      advanced: true
+      selector:
+        text:
+    ring_time_s:
+      name: Ring time [s]
+      description: How long the modem should keep dialing before it disconnects the call.
+      selector:
+        number:
+          min: 1
+          max: 3600
+          step: 1
+          mode: box

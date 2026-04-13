@@ -11,6 +11,8 @@
 - REST API dla przyszłej integracji
 - MQTT publish/subscribe w stylu bramki SMS
 - eventy Home Assistant dla triggerów automatyzacji
+- automatyczne przywracanie `custom_component` do `/config/custom_components/qtronic_sms_gateway`
+- powrót do prostych akcji `qtronic_sms_gateway.send_sms` i `qtronic_sms_gateway.call_to` po restarcie HA
 
 ## Quick Start
 
@@ -25,7 +27,9 @@
    - `ESPHome encryption key`
 3. Jeśli chcesz MQTT, włącz sekcję `MQTT` i ustaw broker.
 4. Uruchom add-on.
-5. Wejdź w `Otwórz interfejs użytkownika`.
+5. Add-on zsynchronizuje `custom_component` do katalogu HA.
+6. Zrestartuj Home Assistant, jeśli chcesz od razu odzyskać akcje `send_sms` / `call_to`, encje `notify` i triggery `SMS/CALL`.
+7. Wejdź w `Otwórz interfejs użytkownika`.
 
 ## MQTT
 
@@ -204,11 +208,12 @@ Jeśli `id` nie zostanie podane, add-on wygeneruje je z nazwy.
 
 ## Uwaga
 
-Ten add-on jest fundamentem pod docelową integrację HA. Obecnie zapewnia:
+Add-on jest teraz backendem i menedżerem integracji:
 
-- połączenie z ESPHome
-- publikację stanów i zdarzeń
-- REST i MQTT jako warstwę komunikacji
+- łączy się z ESPHome
+- publikuje stany i zdarzenia
+- wystawia REST i MQTT jako warstwę komunikacji
+- automatycznie instaluje HTTP-backed `custom_component`, który przywraca klasyczne akcje HA
 
 ## Źródła
 

@@ -1,0 +1,10 @@
+{
+  "domain": "qtronic_sms_gateway",
+  "name": "Q-Tronic SMS Gateway",
+  "codeowners": [],
+  "config_flow": true,
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "loggers": ["custom_components.qtronic_sms_gateway"],
+  "version": "0.6.0"
+}

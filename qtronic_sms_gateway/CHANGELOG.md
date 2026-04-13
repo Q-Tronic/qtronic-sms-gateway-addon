@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.5
+
+- Make the `Konfiguracja` card span the full dashboard row
+- Wrap long JSON lines in the configuration preview so the full text stays readable
+
 ## 0.4.4
 
 - Fix the ingress dashboard frontend to build API URLs from the current browser path instead of relying on FastAPI `root_path`

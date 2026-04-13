@@ -217,6 +217,7 @@ Add-on jest teraz backendem i menedżerem integracji:
 - automatycznie instaluje HTTP-backed `custom_component`, który przywraca klasyczne akcje HA
 - przy dodawaniu integracji domyślnie podpowiada realny hostname add-onu zapisany podczas synchronizacji i nie pokazuje już zbędnego pola `encryption_key`
 - dashboard ingress buduje endpointy API z bieżącego URL przeglądarki, więc nie powinien już wpadać w błędy autoryzacji Home Assistanta na `/api/config` i `/api/events`
+- karta `Konfiguracja` w dashboardzie zajmuje pełną szerokość rzędu i zawija długie linie JSON-a
 
 ## Źródła
 

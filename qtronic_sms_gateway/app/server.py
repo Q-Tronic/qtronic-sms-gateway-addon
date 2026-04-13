@@ -83,6 +83,9 @@ def _dashboard_html() -> str:
       padding: 18px;
       box-shadow: 0 18px 40px rgba(0, 0, 0, 0.25);
     }
+    .card--full {
+      grid-column: 1 / -1;
+    }
     .card h2 { margin: 0 0 14px; font-size: 18px; }
     .pill {
       display: inline-flex; align-items: center; gap: 8px;
@@ -98,6 +101,12 @@ def _dashboard_html() -> str:
     .stack { display: grid; gap: 12px; }
     .list { margin: 0; padding-left: 18px; }
     .mono { font-family: Consolas, monospace; }
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
     input, textarea, button, select {
       width: 100%; border-radius: 12px; border: 1px solid var(--border);
       background: #10151b; color: var(--text); padding: 12px 14px; font: inherit;
@@ -184,7 +193,7 @@ def _dashboard_html() -> str:
         <div id="events" class="events"></div>
       </section>
 
-      <section class="card">
+      <section class="card card--full">
         <h2>Konfiguracja</h2>
         <pre id="config" class="mono muted"></pre>
       </section>

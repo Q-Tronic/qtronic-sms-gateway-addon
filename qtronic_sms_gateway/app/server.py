@@ -38,13 +38,6 @@ class RuntimeState:
 runtime = RuntimeState()
 
 
-def _ingress_api_url(request: Request, route_name: str) -> str:
-    """Build an ingress-aware path for frontend fetch() calls."""
-    root_path = str(request.scope.get("root_path", "") or "").rstrip("/")
-    route_path = str(request.app.url_path_for(route_name))
-    return f"{root_path}{route_path}" if root_path else route_path
-
-
 def _dashboard_html() -> str:
     return """<!doctype html>
 <html lang="pl">
@@ -201,12 +194,20 @@ def _dashboard_html() -> str:
   </div>
 
   <script>
-    const API_STATUS_URL = "__API_STATUS_URL__";
-    const API_CONFIG_URL = "__API_CONFIG_URL__";
-    const API_EVENTS_URL = "__API_EVENTS_URL__";
-    const API_SEND_SMS_URL = "__API_SEND_SMS_URL__";
-    const API_CALL_URL = "__API_CALL_URL__";
-    const API_HANGUP_URL = "__API_HANGUP_URL__";
+    function ingressApiUrl(relativePath) {
+      const basePath = window.location.pathname.endsWith("/")
+        ? window.location.pathname
+        : window.location.pathname + "/";
+      const cleanPath = relativePath.replace(/^\\//, "");
+      return basePath + cleanPath;
+    }
+
+    const API_STATUS_URL = ingressApiUrl("api/status");
+    const API_CONFIG_URL = ingressApiUrl("api/config");
+    const API_EVENTS_URL = ingressApiUrl("api/events");
+    const API_SEND_SMS_URL = ingressApiUrl("api/send-sms");
+    const API_CALL_URL = ingressApiUrl("api/call");
+    const API_HANGUP_URL = ingressApiUrl("api/hangup");
 
     function setText(id, value) {
       const node = document.getElementById(id);
@@ -389,17 +390,11 @@ def _gateway_or_400() -> GatewayService:
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> str:
     html = _dashboard_html()
-    replacements = {
-        "__API_STATUS_URL__": _ingress_api_url(request, "api_status"),
-        "__API_CONFIG_URL__": _ingress_api_url(request, "api_config"),
-        "__API_EVENTS_URL__": _ingress_api_url(request, "api_events"),
-        "__API_SEND_SMS_URL__": _ingress_api_url(request, "api_send_sms"),
-        "__API_CALL_URL__": _ingress_api_url(request, "api_call"),
-        "__API_HANGUP_URL__": _ingress_api_url(request, "api_hangup"),
-    }
-    for key, value in replacements.items():
-        html = html.replace(key, value)
-    _LOGGER.info("Serving ingress dashboard with root_path=%s", request.scope.get("root_path", ""))
+    _LOGGER.info(
+        "Serving ingress dashboard with path=%s root_path=%s",
+        request.url.path,
+        request.scope.get("root_path", ""),
+    )
     return HTMLResponse(
         content=html,
         headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"},

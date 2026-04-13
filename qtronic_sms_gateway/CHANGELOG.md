@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.4
+
+- Fix the ingress dashboard frontend to build API URLs from the current browser path instead of relying on FastAPI `root_path`
+- Prevent the dashboard from accidentally calling Home Assistant core `/api/config` and `/api/events`
+
 ## 0.4.3
 
 - Capture the real add-on hostname during component sync and use it as the suggested integration host

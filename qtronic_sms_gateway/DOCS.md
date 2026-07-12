@@ -13,6 +13,11 @@
 - eventy Home Assistant dla triggerów automatyzacji
 - automatyczne przywracanie `custom_component` do `/config/custom_components/qtronic_sms_gateway`
 - powrót do prostych akcji `qtronic_sms_gateway.send_sms` i `qtronic_sms_gateway.call_to` po restarcie HA
+- osobne statusy diagnostyczne ESP i SIM800C w dashboardzie, MQTT i integracji HA
+
+Status `SIM800C: ONLINE` oznacza, że modem jest zarejestrowany w sieci GSM.
+`OFFLINE / brak rejestracji` oznacza brak rejestracji; bez dodatkowego sensora
+zasilania nie pozwala rozróżnić wyłączonego modemu, braku karty SIM i braku zasięgu.
 
 ## Quick Start
 

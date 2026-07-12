@@ -228,9 +228,12 @@ class MQTTBridge:
             event_type = event.get("type")
             if event_type == "availability":
                 await self._publish_availability(bool(event.get("available")))
+                await self._publish_component_status()
             elif event_type == "state_changed":
                 role = event.get("role")
                 await self._publish_state(role, event.get("value"))
+                if role == "registered":
+                    await self._publish_component_status()
             elif event_type == "sms_received":
                 await self._publish_json(self._topic("event/sms_received"), event)
             elif event_type == "incoming_call":
@@ -264,8 +267,25 @@ class MQTTBridge:
         snapshot = self.gateway.snapshot()
         await self._publish_json(self._topic("snapshot"), snapshot, retain=False)
         await self._publish_availability(snapshot["available"])
+        await self._publish_component_status(snapshot)
         for role, value in snapshot["states"].items():
             await self._publish_state(role, value)
+
+    async def _publish_component_status(
+        self, snapshot: dict[str, Any] | None = None
+    ) -> None:
+        snapshot = snapshot or self.gateway.snapshot()
+        component_status = snapshot.get("component_status", {})
+        await self._publish(
+            self._topic("state/esp_status"),
+            str(component_status.get("esp", "unknown")),
+            retain=True,
+        )
+        await self._publish(
+            self._topic("state/sim800_status"),
+            str(component_status.get("sim800", "unknown")),
+            retain=True,
+        )
 
     async def _publish_control_snapshot(self) -> None:
         for key in self._controls:
@@ -366,6 +386,28 @@ class MQTTBridge:
         availability = self._availability()
 
         discovery_items = [
+            (
+                "sensor",
+                "esp_status",
+                {
+                    "name": "Q-Tronic ESP Status",
+                    "default_entity_id": "sensor.qtronic_sms_gateway_esp_status",
+                    "state_topic": self._topic("state/esp_status"),
+                    "icon": "mdi:chip",
+                    "entity_category": "diagnostic",
+                },
+            ),
+            (
+                "sensor",
+                "sim800_status",
+                {
+                    "name": "Q-Tronic SIM800C Status",
+                    "default_entity_id": "sensor.qtronic_sms_gateway_sim800_status",
+                    "state_topic": self._topic("state/sim800_status"),
+                    "icon": "mdi:sim-alert",
+                    "entity_category": "diagnostic",
+                },
+            ),
             (
                 "sensor",
                 "rssi",
@@ -586,10 +628,11 @@ class MQTTBridge:
             payload.update(
                 {
                     "unique_id": f"qtronic_sms_gateway_{object_id}",
-                    "availability": availability,
                     "device": device,
                 }
             )
+            if object_id not in {"esp_status", "sim800_status"}:
+                payload["availability"] = availability
             _LOGGER.info("Publishing MQTT discovery topic %s", discovery_topic)
             await self._publish_json(discovery_topic, payload, retain=True)
 

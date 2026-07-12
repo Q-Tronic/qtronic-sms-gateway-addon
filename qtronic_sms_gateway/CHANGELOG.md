@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.7
+
+- Add separate ESP and SIM800C diagnostic status to the Ingress dashboard and REST status payload
+- Publish ESP and SIM800C diagnostic sensors through MQTT discovery
+- Add ESP Status and SIM800C Status diagnostic entities to the bundled Home Assistant integration
+- Report SIM800C as `not_registered` instead of claiming a definite power failure when registration is unavailable
+
 ## 0.4.6
 
 - Re-emit `incoming_call` events for repeated calls from the same number instead of requiring the sensor text to change

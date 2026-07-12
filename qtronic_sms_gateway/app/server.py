@@ -251,12 +251,22 @@ def _dashboard_html() -> str:
       const config = await configResp.json();
       const events = await eventsResp.json();
 
-      const available = status.available ? "Połączono" : "Rozłączono";
+      const available = status.available ? "ESP: OK" : "ESP: OFFLINE";
       const pill = document.getElementById("availability-pill");
       pill.textContent = available;
       pill.className = "pill " + (status.available ? "good" : "bad");
 
+      const espStatus = status.component_status?.esp === "ok" ? "OK" : "OFFLINE";
+      const sim800Labels = {
+        online: "ONLINE (zarejestrowany)",
+        not_registered: "OFFLINE / brak rejestracji",
+        unknown: "NIEZNANY"
+      };
+      const sim800Status = sim800Labels[status.component_status?.sim800] || "NIEZNANY";
+
       renderDefinitionList("status-grid", [
+        ["ESP", espStatus],
+        ["SIM800C", sim800Status],
         ["ESPHome host", status.host],
         ["Urządzenie", status.device?.name || "—"],
         ["Model", status.device?.model || "—"],

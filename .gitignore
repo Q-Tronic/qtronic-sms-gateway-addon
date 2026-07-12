@@ -1,1 +1,3 @@
 qtronic_sms_gateway/AGENTS.md
+__pycache__/
+*.py[cod]

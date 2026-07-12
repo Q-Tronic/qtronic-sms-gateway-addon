@@ -34,6 +34,8 @@ async def async_setup_entry(
     """Set up Q-Tronic SMS Gateway sensors."""
     hub: QTronicSmsGatewayHub = entry.runtime_data
     entities: list[SensorEntity] = [
+        QTronicSmsGatewayComponentStatusSensor(hub, "esp"),
+        QTronicSmsGatewayComponentStatusSensor(hub, "sim800"),
         QTronicSmsGatewayLastBatchSensor(hub),
         QTronicSmsGatewayLastCallBatchSensor(hub),
     ]
@@ -55,6 +57,51 @@ async def async_setup_entry(
             entities.append(QTronicSmsGatewayTextValueSensor(hub, info, role))
 
     async_add_entities(entities)
+
+
+class QTronicSmsGatewayComponentStatusSensor(SensorEntity):
+    """Diagnostic status for the ESP or SIM800C layer."""
+
+    _attr_has_entity_name = True
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_should_poll = False
+
+    def __init__(self, hub: QTronicSmsGatewayHub, component: str) -> None:
+        self.hub = hub
+        self._component = component
+        self._attr_unique_id = f"{hub.unique_id_prefix}_{component}_status"
+        self._attr_name = "ESP Status" if component == "esp" else "SIM800C Status"
+        self._attr_icon = "mdi:chip" if component == "esp" else "mdi:sim-alert"
+        self._attr_options = (
+            ["ok", "offline"]
+            if component == "esp"
+            else ["online", "not_registered", "unknown"]
+        )
+        self._remove_listener = None
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def device_info(self):
+        return self.hub.ha_device_info
+
+    @property
+    def native_value(self) -> str:
+        return self.hub.component_status(self._component)
+
+    async def async_added_to_hass(self) -> None:
+        self._remove_listener = self.hub.async_add_listener(self._handle_hub_update)
+
+    async def async_will_remove_from_hass(self) -> None:
+        if self._remove_listener is not None:
+            self._remove_listener()
+            self._remove_listener = None
+
+    def _handle_hub_update(self) -> None:
+        self.async_write_ha_state()
 
 
 class QTronicSmsGatewayRssiSensor(QTronicSmsGatewayEntity, SensorEntity):

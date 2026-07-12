@@ -209,6 +209,10 @@ class QTronicSmsGatewayHub:
         self._stop_event = asyncio.Event()
         self._last_connect_error: str | None = None
         self._states: dict[str, Any] = {}
+        self._component_status: dict[str, str] = {
+            "esp": "offline",
+            "sim800": "unknown",
+        }
         self._service_flags: dict[str, bool] = {}
         self._queue_depth = 0
         self._active_job_kind: str | None = None
@@ -461,6 +465,10 @@ class QTronicSmsGatewayHub:
     def state_for_role(self, role: str) -> Any:
         return self._states.get(role)
 
+    def component_status(self, component: str) -> str:
+        """Return the backend-derived status of an ESP or modem component."""
+        return self._component_status.get(component, "unknown")
+
     def notify_unique_id_for_recipient(self, recipient_id: str) -> str:
         return f"{self.unique_id_prefix}_recipient_notify_{recipient_id}"
 
@@ -598,6 +606,11 @@ class QTronicSmsGatewayHub:
             "call": bool(payload.get("services", {}).get("call", True)),
         }
         self._states = dict(payload.get("states") or {})
+        component_status = payload.get("component_status") or {}
+        self._component_status = {
+            "esp": str(component_status.get("esp", "ok" if self.available else "offline")),
+            "sim800": str(component_status.get("sim800", "unknown")),
+        }
 
         recipients_payload = payload.get("saved_recipients") or []
         addon_recipients: list[SavedRecipient] = []

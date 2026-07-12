@@ -345,8 +345,23 @@ class GatewayService:
         ):
             role_values[role] = state_as_value(self.state_for_role(role))
 
+        registered = role_values[ROLE_REGISTERED]
+        esp_status = "ok" if self.available else "offline"
+        if not self.available:
+            sim800_status = "unknown"
+        elif registered is True:
+            sim800_status = "online"
+        elif registered is False:
+            sim800_status = "not_registered"
+        else:
+            sim800_status = "unknown"
+
         return {
             "available": self.available,
+            "component_status": {
+                "esp": esp_status,
+                "sim800": sim800_status,
+            },
             "host": self.host,
             "port": self.port,
             "device": {

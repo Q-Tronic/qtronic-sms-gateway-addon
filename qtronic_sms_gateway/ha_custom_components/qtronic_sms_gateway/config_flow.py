@@ -30,6 +30,14 @@ from .const import (
     CONF_DISCONNECT_ACTION,
     CONF_EXPECTED_MAC,
     CONF_EXPECTED_NAME,
+    CONF_FORWARD_CALLS_ENABLED,
+    CONF_FORWARD_CALL_TEMPLATE,
+    CONF_FORWARD_COMMAND_MESSAGES,
+    CONF_FORWARD_EXCLUDED_NUMBERS,
+    CONF_FORWARD_EXCLUDED_RECIPIENT_IDS,
+    CONF_FORWARD_RECIPIENT_IDS,
+    CONF_FORWARD_SMS_ENABLED,
+    CONF_FORWARD_SMS_TEMPLATE,
     CONF_INCOMING_CALL_OBJECT_ID,
     CONF_MODEM_ONLINE_OBJECT_ID,
     CONF_REGISTERED_OBJECT_ID,
@@ -88,6 +96,13 @@ from .hub import (
     GatewayConnectionError,
     normalize_mac,
     validate_gateway_connection,
+)
+from .forwarding import (
+    DEFAULT_FORWARD_CALL_TEMPLATE,
+    DEFAULT_FORWARD_SMS_TEMPLATE,
+    FORWARD_TEMPLATE_FIELDS,
+    parse_forward_excluded_numbers,
+    validate_forward_template,
 )
 from .recipients import (
     SavedRecipient,
@@ -296,6 +311,72 @@ def calling_schema(defaults: dict[str, Any]) -> vol.Schema:
                     ],
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
+            ),
+        }
+    )
+
+
+def forwarding_schema(
+    defaults: dict[str, Any],
+    saved_recipients: tuple[SavedRecipient, ...],
+) -> vol.Schema:
+    """Build the inbound SMS and call forwarding form schema."""
+    recipient_options = recipient_select_options(saved_recipients)
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_FORWARD_SMS_ENABLED,
+                default=defaults.get(CONF_FORWARD_SMS_ENABLED, False),
+            ): selector.BooleanSelector(),
+            vol.Required(
+                CONF_FORWARD_CALLS_ENABLED,
+                default=defaults.get(CONF_FORWARD_CALLS_ENABLED, False),
+            ): selector.BooleanSelector(),
+            vol.Required(
+                CONF_FORWARD_COMMAND_MESSAGES,
+                default=defaults.get(CONF_FORWARD_COMMAND_MESSAGES, False),
+            ): selector.BooleanSelector(),
+            vol.Optional(
+                CONF_FORWARD_RECIPIENT_IDS,
+                default=defaults.get(CONF_FORWARD_RECIPIENT_IDS, []),
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=recipient_options,
+                    multiple=True,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional(
+                CONF_FORWARD_EXCLUDED_RECIPIENT_IDS,
+                default=defaults.get(CONF_FORWARD_EXCLUDED_RECIPIENT_IDS, []),
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=recipient_options,
+                    multiple=True,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional(
+                CONF_FORWARD_EXCLUDED_NUMBERS,
+                default=defaults.get(CONF_FORWARD_EXCLUDED_NUMBERS, ""),
+            ): selector.TextSelector(
+                selector.TextSelectorConfig(multiline=True)
+            ),
+            vol.Required(
+                CONF_FORWARD_SMS_TEMPLATE,
+                default=defaults.get(
+                    CONF_FORWARD_SMS_TEMPLATE, DEFAULT_FORWARD_SMS_TEMPLATE
+                ),
+            ): selector.TextSelector(
+                selector.TextSelectorConfig(multiline=True)
+            ),
+            vol.Required(
+                CONF_FORWARD_CALL_TEMPLATE,
+                default=defaults.get(
+                    CONF_FORWARD_CALL_TEMPLATE, DEFAULT_FORWARD_CALL_TEMPLATE
+                ),
+            ): selector.TextSelector(
+                selector.TextSelectorConfig(multiline=True)
             ),
         }
     )
@@ -761,6 +842,7 @@ class QTronicSmsGatewayOptionsFlow(OptionsFlow):
                 "messaging",
                 "calling",
                 "recipients",
+                "forwarding",
                 "sms_commands",
                 "entity_mapping",
                 "finish",
@@ -912,6 +994,143 @@ class QTronicSmsGatewayOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="calling",
             data_schema=calling_schema(defaults),
+        )
+
+    async def async_step_forwarding(
+        self, user_input: dict[str, Any] | None = None
+    ):
+        """Configure native forwarding of inbound SMS messages and calls."""
+        errors: dict[str, str] = {}
+        managed_keys = (
+            CONF_FORWARD_SMS_ENABLED,
+            CONF_FORWARD_CALLS_ENABLED,
+            CONF_FORWARD_COMMAND_MESSAGES,
+            CONF_FORWARD_RECIPIENT_IDS,
+            CONF_FORWARD_EXCLUDED_RECIPIENT_IDS,
+            CONF_FORWARD_EXCLUDED_NUMBERS,
+            CONF_FORWARD_SMS_TEMPLATE,
+            CONF_FORWARD_CALL_TEMPLATE,
+        )
+
+        if user_input is not None:
+            recipient_ids = user_input.get(CONF_FORWARD_RECIPIENT_IDS, [])
+            if isinstance(recipient_ids, str):
+                recipient_ids = [recipient_ids]
+            recipient_ids = [str(item) for item in recipient_ids]
+
+            excluded_recipient_ids = user_input.get(
+                CONF_FORWARD_EXCLUDED_RECIPIENT_IDS, []
+            )
+            if isinstance(excluded_recipient_ids, str):
+                excluded_recipient_ids = [excluded_recipient_ids]
+            excluded_recipient_ids = [
+                str(item) for item in excluded_recipient_ids
+            ]
+
+            valid_recipient_ids = {
+                recipient.id for recipient in self.available_recipients
+            }
+            if any(
+                recipient_id not in valid_recipient_ids
+                for recipient_id in recipient_ids + excluded_recipient_ids
+            ):
+                errors["base"] = "invalid_forward_recipient"
+            elif (
+                bool(user_input.get(CONF_FORWARD_SMS_ENABLED, False))
+                or bool(user_input.get(CONF_FORWARD_CALLS_ENABLED, False))
+            ) and not recipient_ids:
+                errors["base"] = "forward_no_recipients"
+
+            try:
+                excluded_numbers = parse_forward_excluded_numbers(
+                    user_input.get(CONF_FORWARD_EXCLUDED_NUMBERS, "")
+                )
+            except ValueError:
+                errors["base"] = "invalid_forward_phone"
+                excluded_numbers = ()
+
+            sms_template = str(
+                user_input.get(CONF_FORWARD_SMS_TEMPLATE, "") or ""
+            ).strip()
+            call_template = str(
+                user_input.get(CONF_FORWARD_CALL_TEMPLATE, "") or ""
+            ).strip()
+            if not sms_template:
+                sms_template = DEFAULT_FORWARD_SMS_TEMPLATE
+            if not call_template:
+                call_template = DEFAULT_FORWARD_CALL_TEMPLATE
+            try:
+                validate_forward_template(sms_template)
+                validate_forward_template(call_template)
+            except ValueError:
+                errors["base"] = "invalid_forward_template"
+
+            if not errors:
+                normalized_input = {
+                    **user_input,
+                    CONF_FORWARD_RECIPIENT_IDS: recipient_ids,
+                    CONF_FORWARD_EXCLUDED_RECIPIENT_IDS: excluded_recipient_ids,
+                    CONF_FORWARD_EXCLUDED_NUMBERS: list(excluded_numbers),
+                    CONF_FORWARD_SMS_TEMPLATE: sms_template,
+                    CONF_FORWARD_CALL_TEMPLATE: call_template,
+                }
+                update_managed_options(
+                    self.working_options, normalized_input, managed_keys
+                )
+                return await self.async_step_init()
+
+        if user_input is not None:
+            defaults = dict(user_input)
+        else:
+            defaults = {
+                CONF_FORWARD_SMS_ENABLED: self.working_options.get(
+                    CONF_FORWARD_SMS_ENABLED, False
+                ),
+                CONF_FORWARD_CALLS_ENABLED: self.working_options.get(
+                    CONF_FORWARD_CALLS_ENABLED, False
+                ),
+                CONF_FORWARD_COMMAND_MESSAGES: self.working_options.get(
+                    CONF_FORWARD_COMMAND_MESSAGES, False
+                ),
+                CONF_FORWARD_RECIPIENT_IDS: [
+                    recipient_id
+                    for recipient_id in self.working_options.get(
+                        CONF_FORWARD_RECIPIENT_IDS, []
+                    )
+                    if recipient_id in {
+                        recipient.id for recipient in self.available_recipients
+                    }
+                ],
+                CONF_FORWARD_EXCLUDED_RECIPIENT_IDS: [
+                    recipient_id
+                    for recipient_id in self.working_options.get(
+                        CONF_FORWARD_EXCLUDED_RECIPIENT_IDS, []
+                    )
+                    if recipient_id in {
+                        recipient.id for recipient in self.available_recipients
+                    }
+                ],
+                CONF_FORWARD_EXCLUDED_NUMBERS: "\n".join(
+                    str(number)
+                    for number in self.working_options.get(
+                        CONF_FORWARD_EXCLUDED_NUMBERS, []
+                    )
+                ),
+                CONF_FORWARD_SMS_TEMPLATE: self.working_options.get(
+                    CONF_FORWARD_SMS_TEMPLATE, DEFAULT_FORWARD_SMS_TEMPLATE
+                ),
+                CONF_FORWARD_CALL_TEMPLATE: self.working_options.get(
+                    CONF_FORWARD_CALL_TEMPLATE, DEFAULT_FORWARD_CALL_TEMPLATE
+                ),
+            }
+
+        return self.async_show_form(
+            step_id="forwarding",
+            data_schema=forwarding_schema(defaults, self.available_recipients),
+            errors=errors,
+            description_placeholders={
+                name: "{" + name + "}" for name in FORWARD_TEMPLATE_FIELDS
+            },
         )
 
     async def async_step_recipients(self, user_input: dict[str, Any] | None = None):

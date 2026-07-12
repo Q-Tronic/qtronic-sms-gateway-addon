@@ -37,6 +37,7 @@
           "messaging": "SMS sending",
           "calling": "Calling",
           "recipients": "Saved recipients",
+          "forwarding": "SMS and call forwarding",
           "sms_commands": "SMS commands and replies",
           "entity_mapping": "Entity mapping",
           "finish": "Save and close"
@@ -114,6 +115,20 @@
         "description": "Choose one or more recipients to remove.",
         "data": {
           "recipient_id": "Recipients to delete"
+        }
+      },
+      "forwarding": {
+        "title": "SMS and call forwarding",
+        "description": "Forward received messages and incoming-call notifications to selected saved recipients. The integration always removes the source number from the target list, so it never sends a copy back to the sender. Messages recognized as commands are not forwarded by default.\n\nTemplate variables: `{data_czas}`, `{nadawca}`, `{nazwa_nadawcy}`, `{wiadomosc}`, `{dzwoniacy}`, `{typ}`.",
+        "data": {
+          "forward_sms_enabled": "Forward received SMS messages",
+          "forward_calls_enabled": "Send an SMS notification for incoming calls",
+          "forward_command_messages": "Also forward SMS messages recognized as commands",
+          "forward_recipient_ids": "Forwarding recipients",
+          "forward_excluded_recipient_ids": "Do not forward messages or calls from these saved senders",
+          "forward_excluded_numbers": "Additional excluded numbers (one per line)",
+          "forward_sms_template": "Forwarded SMS template",
+          "forward_call_template": "Incoming-call notification template"
         }
       },
       "sms_commands": {
@@ -200,7 +215,11 @@
       "entity_not_found": "The selected entity does not exist or is not currently available in Home Assistant.",
       "unsupported_entity": "The selected entity does not support this operation. Any entity can be selected for state reporting.",
       "duplicate_sms_rule": "A rule with the same sender, command, and matching mode already exists.",
-      "invalid_reply_template": "The reply template contains invalid syntax or an unsupported variable."
+      "invalid_reply_template": "The reply template contains invalid syntax or an unsupported variable.",
+      "forward_no_recipients": "Select at least one forwarding recipient.",
+      "invalid_forward_recipient": "A selected forwarding recipient or excluded sender no longer exists in the saved contacts.",
+      "invalid_forward_phone": "Check the additional excluded phone numbers.",
+      "invalid_forward_template": "A forwarding template contains invalid syntax or an unsupported variable."
     },
     "abort": {
       "no_saved_recipients": "There are no saved recipients for this action.",

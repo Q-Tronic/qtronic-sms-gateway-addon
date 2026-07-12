@@ -28,6 +28,7 @@ from .const import (
     SERVICE_SEND_SMS,
     SMS_ENCODINGS,
 )
+from .forwarding import InboundForwardingEngine
 from .hub import GatewayAuthenticationError, GatewayConnectionError, QTronicSmsGatewayHub
 from .recipients import deduplicate_phone_numbers, mask_phone_number
 from .restart_issue import async_sync_restart_issue
@@ -239,6 +240,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     command_engine = SmsCommandRuleEngine(hass, hub)
     await command_engine.async_start()
     hub.sms_command_engine = command_engine
+    forwarding_engine = InboundForwardingEngine(hass, hub)
+    await forwarding_engine.async_start()
+    hub.inbound_forwarding_engine = forwarding_engine
     return True
 
 
@@ -246,6 +250,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     hub: QTronicSmsGatewayHub = entry.runtime_data
+    forwarding_engine = getattr(hub, "inbound_forwarding_engine", None)
+    if forwarding_engine is not None:
+        await forwarding_engine.async_stop()
     command_engine = getattr(hub, "sms_command_engine", None)
     if command_engine is not None:
         await command_engine.async_stop()

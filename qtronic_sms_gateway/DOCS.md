@@ -199,6 +199,45 @@ Wykonano polecenie dla {nazwa_encji}. Nowy stan: {stan}
 Pierwsza pasująca reguła jest wykonywana, a identyczne komendy dla tego samego
 nadawcy są blokowane podczas konfiguracji, aby uniknąć niejednoznacznych akcji.
 
+## Przekazywanie SMS-ów i informacji o połączeniach
+
+Przekazywanie można skonfigurować bez osobnej automatyzacji Home Assistant:
+
+`Ustawienia -> Urządzenia i usługi -> Q-Tronic SMS Gateway -> Konfiguruj -> Przekazywanie SMS i połączeń`
+
+Formularz pozwala:
+
+- włączyć niezależnie przekazywanie odebranych SMS-ów
+- włączyć wysyłanie SMS-a informacyjnego o połączeniu przychodzącym
+- wybrać jednego lub wielu zapisanych odbiorców
+- wykluczyć zapisanych nadawców oraz dodatkowe ręcznie wpisane numery
+- zdecydować, czy SMS-y rozpoznane jako polecenia również mają być przekazywane
+- zmienić szablony wiadomości
+
+Integracja zawsze porównuje numer źródłowy z numerami odbiorców i usuwa go z
+listy docelowej. Dzięki temu wiadomość nigdy nie jest odsyłana jako kopia do
+osoby, która ją wysłała. Komendy SMS domyślnie nie są przekazywane.
+
+Domyślne szablony zachowują format znany z automatyzacji:
+
+```text
+{data_czas}
+OD: {nadawca}
+SMS: {wiadomosc}
+```
+
+```text
+{data_czas}
+POŁĄCZENIE OD: {dzwoniacy}
+```
+
+Dostępne zmienne to `{data_czas}`, `{nadawca}`, `{nazwa_nadawcy}`,
+`{wiadomosc}`, `{dzwoniacy}` oraz `{typ}`. Powiadomienie o połączeniu jest
+wiadomością SMS; nie jest przekierowaniem rozmowy w sieci GSM.
+
+Po zapisaniu tej konfiguracji wyłącz lub usuń wcześniejszą automatyzację
+forwardującą, aby nie otrzymywać zdublowanych powiadomień.
+
 Przykład triggera po SMS:
 
 ```yaml

@@ -14,7 +14,6 @@ from homeassistant.core import Event, HomeAssistant, State, callback
 from homeassistant.exceptions import HomeAssistantError
 
 from .const import (
-    EVENT_ATTR_ADDON_HOSTNAME,
     EVENT_ATTR_GATEWAY_HOST,
     EVENT_ATTR_MESSAGE,
     EVENT_ATTR_SAVED_RECIPIENT_ID,
@@ -49,6 +48,7 @@ from .const import (
     SMS_RULE_SUCCESS_REPLY,
 )
 from .hub import QTronicSmsGatewayHub
+from .event_source import event_belongs_to_hub
 from .recipients import (
     SavedRecipient,
     mask_phone_number,
@@ -347,23 +347,31 @@ class SmsCommandRuleEngine:
     @callback
     def _handle_sms_event(self, event: Event) -> None:
         """Schedule rule processing from the Home Assistant event loop."""
-        task = self.hass.async_create_task(self._async_process_sms(event))
+        task = self.entry.async_create_task(
+            self.hass,
+            self._async_process_sms(event),
+            "Q-Tronic process inbound SMS command",
+        )
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
 
-    def _event_belongs_to_this_entry(self, event: Event) -> bool:
-        event_gateway_host = str(event.data.get(EVENT_ATTR_GATEWAY_HOST, "")).lower()
-        if event_gateway_host:
-            return event_gateway_host == self.hub.gateway_host.lower()
-        event_addon_hostname = str(event.data.get(EVENT_ATTR_ADDON_HOSTNAME, "")).lower()
-        if event_addon_hostname:
-            candidates = {
-                self.hub.host.lower(),
-                str(self.entry.data.get("host", "")).lower(),
-            }
-            return event_addon_hostname in candidates
+    def matching_rule(self, sender: str, message: str) -> SmsCommandRule | None:
+        """Return the first enabled rule matching a sender and message."""
+        for rule in self.rules:
+            if not rule.enabled:
+                continue
+            if not sms_rule_matches_sender(
+                rule,
+                sender,
+                self.hub.saved_recipient_map,
+            ):
+                continue
+            if sms_rule_matches_message(rule, message):
+                return rule
+        return None
 
-        return False
+    def _event_belongs_to_this_entry(self, event: Event) -> bool:
+        return event_belongs_to_hub(event, self.hub)
 
     async def _async_process_sms(self, event: Event) -> None:
         if not self._event_belongs_to_this_entry(event):
@@ -376,22 +384,13 @@ class SmsCommandRuleEngine:
         if not sender or not message:
             return
 
-        for rule in self.rules:
-            if not rule.enabled:
-                continue
-            if not sms_rule_matches_sender(
-                rule,
-                sender,
-                self.hub.saved_recipient_map,
-            ):
-                continue
-            if not sms_rule_matches_message(rule, message):
-                continue
-            async with self._execution_lock:
-                await self._async_execute_rule(
-                    rule, sender, message, saved_recipient_id, event
-                )
+        rule = self.matching_rule(sender, message)
+        if rule is None:
             return
+        async with self._execution_lock:
+            await self._async_execute_rule(
+                rule, sender, message, saved_recipient_id, event
+            )
 
     async def _async_execute_rule(
         self,

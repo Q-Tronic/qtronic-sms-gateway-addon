@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.11
+
+- Add native inbound SMS and incoming-call forwarding to the bundled Home Assistant integration
+- Configure forwarding recipients and excluded saved contacts or phone numbers from the integration UI
+- Preserve the existing timestamp, sender, message, and incoming-call SMS formatting with editable templates
+- Prevent self-echo by always removing the inbound sender or caller from forwarding targets
+- Skip forwarding messages recognized as SMS command rules by default
+- Isolate forwarded events per configured gateway and process tasks through the config-entry lifecycle
+
 ## 0.4.10
 
 - Fix inbound SMS command listeners being dispatched to a worker thread on Home Assistant 2026.7

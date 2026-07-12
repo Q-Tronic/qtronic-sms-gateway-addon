@@ -37,6 +37,7 @@
           "messaging": "Wysyłka SMS",
           "calling": "Połączenia",
           "recipients": "Odbiorcy zapisani",
+          "forwarding": "Przekazywanie SMS i połączeń",
           "sms_commands": "Polecenia i odpowiedzi SMS",
           "entity_mapping": "Mapowanie encji",
           "finish": "Zapisz i zamknij"
@@ -114,6 +115,20 @@
         "description": "Wybierz jednego lub więcej odbiorców do usunięcia.",
         "data": {
           "recipient_id": "Odbiorcy do usunięcia"
+        }
+      },
+      "forwarding": {
+        "title": "Przekazywanie SMS i połączeń",
+        "description": "Przekazuj odebrane wiadomości i informacje o połączeniach do wybranych zapisanych odbiorców. Integracja zawsze usuwa numer nadawcy z listy docelowej, więc nie odeśle mu kopii jego własnej wiadomości. SMS-y rozpoznane jako polecenia domyślnie nie są przekazywane.\n\nZmienne szablonów: `{data_czas}`, `{nadawca}`, `{nazwa_nadawcy}`, `{wiadomosc}`, `{dzwoniacy}`, `{typ}`.",
+        "data": {
+          "forward_sms_enabled": "Przekazuj odebrane SMS-y",
+          "forward_calls_enabled": "Wysyłaj SMS z informacją o połączeniu przychodzącym",
+          "forward_command_messages": "Przekazuj również SMS-y rozpoznane jako polecenia",
+          "forward_recipient_ids": "Odbiorcy przekazywanych wiadomości",
+          "forward_excluded_recipient_ids": "Nie przekazuj wiadomości i połączeń od tych zapisanych nadawców",
+          "forward_excluded_numbers": "Dodatkowe wykluczone numery (jeden w wierszu)",
+          "forward_sms_template": "Szablon przekazywanego SMS-a",
+          "forward_call_template": "Szablon SMS-a informującego o połączeniu"
         }
       },
       "sms_commands": {
@@ -200,7 +215,11 @@
       "entity_not_found": "Wybrana encja nie istnieje lub jest obecnie niedostępna w Home Assistant.",
       "unsupported_entity": "Wybrana encja nie obsługuje tej operacji. Do odczytu stanu możesz wybrać dowolną encję.",
       "duplicate_sms_rule": "Dla tego nadawcy istnieje już reguła z taką samą komendą i sposobem dopasowania.",
-      "invalid_reply_template": "Szablon odpowiedzi zawiera błąd lub nieobsługiwaną zmienną."
+      "invalid_reply_template": "Szablon odpowiedzi zawiera błąd lub nieobsługiwaną zmienną.",
+      "forward_no_recipients": "Wybierz co najmniej jednego odbiorcę przekazywanych wiadomości.",
+      "invalid_forward_recipient": "Wybrany odbiorca lub wykluczony nadawca nie istnieje już na liście zapisanych kontaktów.",
+      "invalid_forward_phone": "Sprawdź dodatkowe wykluczone numery telefonu.",
+      "invalid_forward_template": "Szablon przekazywania zawiera błąd lub nieobsługiwaną zmienną."
     },
     "abort": {
       "no_saved_recipients": "Brak zapisanych odbiorców do tej operacji.",

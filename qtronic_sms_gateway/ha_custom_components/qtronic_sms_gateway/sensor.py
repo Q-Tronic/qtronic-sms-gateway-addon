@@ -76,7 +76,7 @@ class QTronicSmsGatewayComponentStatusSensor(SensorEntity):
         self._attr_options = (
             ["ok", "offline"]
             if component == "esp"
-            else ["online", "not_registered", "unknown"]
+            else ["online", "offline", "not_registered", "unknown"]
         )
         self._remove_listener = None
 

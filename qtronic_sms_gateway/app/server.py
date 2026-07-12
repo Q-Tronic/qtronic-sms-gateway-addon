@@ -259,6 +259,7 @@ def _dashboard_html() -> str:
       const espStatus = status.component_status?.esp === "ok" ? "OK" : "OFFLINE";
       const sim800Labels = {
         online: "ONLINE (zarejestrowany)",
+        offline: "OFFLINE (brak odpowiedzi)",
         not_registered: "OFFLINE / brak rejestracji",
         unknown: "NIEZNANY"
       };
@@ -271,6 +272,7 @@ def _dashboard_html() -> str:
         ["Urządzenie", status.device?.name || "—"],
         ["Model", status.device?.model || "—"],
         ["RSSI", status.states?.rssi ?? "—"],
+        ["Modem online", status.states?.modem_online ?? "—"],
         ["Registered", status.states?.registered ?? "—"],
         ["Call state", status.states?.call_state ?? "—"],
         ["Last error", status.last_connect_error || "—"]

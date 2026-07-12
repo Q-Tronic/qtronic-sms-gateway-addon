@@ -121,6 +121,7 @@
         "data": {
           "rssi_object_id": "RSSI object_id override",
           "registered_object_id": "Registered object_id override",
+          "modem_online_object_id": "Modem Online object_id override",
           "sms_sender_object_id": "SMS sender object_id override",
           "sms_message_object_id": "SMS message object_id override",
           "incoming_call_object_id": "Incoming call object_id override",

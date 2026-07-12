@@ -30,6 +30,9 @@ configuration:
       registered_object_id:
         name: Registered object ID
         description: Object ID used to detect network registration.
+      modem_online_object_id:
+        name: Modem Online object ID
+        description: Object ID of the watchdog confirming SIM800C responses.
       sms_sender_object_id:
         name: SMS sender object ID
         description: Object ID used to detect the SMS sender text sensor.

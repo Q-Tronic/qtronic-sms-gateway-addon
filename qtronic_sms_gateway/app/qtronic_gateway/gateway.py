@@ -65,6 +65,7 @@ AUTH_ERRORS = (
 
 ROLE_RSSI = "rssi"
 ROLE_REGISTERED = "registered"
+ROLE_MODEM_ONLINE = "modem_online"
 ROLE_SMS_SENDER = "sms_sender"
 ROLE_SMS_MESSAGE = "sms_message"
 ROLE_INCOMING_CALL = "incoming_call"
@@ -74,6 +75,7 @@ ROLE_USSD = "ussd"
 AUTO_DETECT_OBJECT_IDS: dict[str, tuple[str, ...]] = {
     ROLE_RSSI: ("rssi", "signal", "signal_strength"),
     ROLE_REGISTERED: ("registered", "network_registered"),
+    ROLE_MODEM_ONLINE: ("modem_online", "sim800_online", "modem_available"),
     ROLE_SMS_SENDER: ("sms_sender", "sender"),
     ROLE_SMS_MESSAGE: ("sms_message", "message", "sms"),
     ROLE_INCOMING_CALL: ("incoming_call", "caller_id", "call"),
@@ -337,6 +339,7 @@ class GatewayService:
         for role in (
             ROLE_RSSI,
             ROLE_REGISTERED,
+            ROLE_MODEM_ONLINE,
             ROLE_SMS_SENDER,
             ROLE_SMS_MESSAGE,
             ROLE_INCOMING_CALL,
@@ -346,8 +349,13 @@ class GatewayService:
             role_values[role] = state_as_value(self.state_for_role(role))
 
         registered = role_values[ROLE_REGISTERED]
+        modem_online = role_values[ROLE_MODEM_ONLINE]
         esp_status = "ok" if self.available else "offline"
         if not self.available:
+            sim800_status = "unknown"
+        elif modem_online is False:
+            sim800_status = "offline"
+        elif modem_online is not True:
             sim800_status = "unknown"
         elif registered is True:
             sim800_status = "online"
@@ -1072,6 +1080,7 @@ class GatewayService:
         overrides = {
             ROLE_RSSI: self.config.esphome.rssi_object_id,
             ROLE_REGISTERED: self.config.esphome.registered_object_id,
+            ROLE_MODEM_ONLINE: self.config.esphome.modem_online_object_id,
             ROLE_SMS_SENDER: self.config.esphome.sms_sender_object_id,
             ROLE_SMS_MESSAGE: self.config.esphome.sms_message_object_id,
             ROLE_INCOMING_CALL: self.config.esphome.incoming_call_object_id,
@@ -1095,7 +1104,7 @@ class GatewayService:
     ) -> EntityInfo | None:
         if role == ROLE_RSSI:
             candidates = [entity for entity in entities if isinstance(entity, SensorInfo)]
-        elif role == ROLE_REGISTERED:
+        elif role in (ROLE_REGISTERED, ROLE_MODEM_ONLINE):
             candidates = [entity for entity in entities if isinstance(entity, BinarySensorInfo)]
         else:
             candidates = [entity for entity in entities if isinstance(entity, TextSensorInfo)]

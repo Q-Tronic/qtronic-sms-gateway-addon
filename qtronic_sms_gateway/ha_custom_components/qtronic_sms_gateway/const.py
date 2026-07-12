@@ -32,6 +32,7 @@ CONF_CALL_STATE_OBJECT_ID = "call_state_object_id"
 CONF_USSD_OBJECT_ID = "ussd_object_id"
 CONF_RSSI_OBJECT_ID = "rssi_object_id"
 CONF_REGISTERED_OBJECT_ID = "registered_object_id"
+CONF_MODEM_ONLINE_OBJECT_ID = "modem_online_object_id"
 CONF_EXPECTED_NAME = "expected_name"
 CONF_EXPECTED_MAC = "expected_mac"
 
@@ -99,6 +100,7 @@ TRIGGER_INCOMING_CALL = "incoming_call"
 
 ROLE_RSSI = "rssi"
 ROLE_REGISTERED = "registered"
+ROLE_MODEM_ONLINE = "modem_online"
 ROLE_SMS_SENDER = "sms_sender"
 ROLE_SMS_MESSAGE = "sms_message"
 ROLE_INCOMING_CALL = "incoming_call"
@@ -108,6 +110,7 @@ ROLE_USSD = "ussd"
 AUTO_DETECT_OBJECT_IDS: dict[str, tuple[str, ...]] = {
     ROLE_RSSI: ("rssi", "signal", "signal_strength"),
     ROLE_REGISTERED: ("registered", "network_registered"),
+    ROLE_MODEM_ONLINE: ("modem_online", "sim800_online", "modem_available"),
     ROLE_SMS_SENDER: ("sms_sender", "sender"),
     ROLE_SMS_MESSAGE: ("sms_message", "message", "sms"),
     ROLE_INCOMING_CALL: ("incoming_call", "caller_id", "call"),
@@ -118,6 +121,7 @@ AUTO_DETECT_OBJECT_IDS: dict[str, tuple[str, ...]] = {
 ROLE_TO_OPTION_KEY: dict[str, str] = {
     ROLE_RSSI: CONF_RSSI_OBJECT_ID,
     ROLE_REGISTERED: CONF_REGISTERED_OBJECT_ID,
+    ROLE_MODEM_ONLINE: CONF_MODEM_ONLINE_OBJECT_ID,
     ROLE_SMS_SENDER: CONF_SMS_SENDER_OBJECT_ID,
     ROLE_SMS_MESSAGE: CONF_SMS_MESSAGE_OBJECT_ID,
     ROLE_INCOMING_CALL: CONF_INCOMING_CALL_OBJECT_ID,

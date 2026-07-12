@@ -15,9 +15,59 @@
 - powrót do prostych akcji `qtronic_sms_gateway.send_sms` i `qtronic_sms_gateway.call_to` po restarcie HA
 - osobne statusy diagnostyczne ESP i SIM800C w dashboardzie, MQTT i integracji HA
 
-Status `SIM800C: ONLINE` oznacza, że modem jest zarejestrowany w sieci GSM.
-`OFFLINE / brak rejestracji` oznacza brak rejestracji; bez dodatkowego sensora
-zasilania nie pozwala rozróżnić wyłączonego modemu, braku karty SIM i braku zasięgu.
+Status `SIM800C: ONLINE` oznacza, że modem odpowiada i jest zarejestrowany w sieci GSM.
+`OFFLINE (brak odpowiedzi)` oznacza, że watchdog nie otrzymał odpowiedzi modemu przez
+30 sekund. `OFFLINE / brak rejestracji` oznacza, że modem odpowiada, ale nie jest
+zarejestrowany (np. brak karty SIM, zasięgu albo problem operatora).
+
+## Watchdog zasilania i odpowiedzi SIM800C
+
+Do konfiguracji ESPHome dodaj poniższe sekcje. Watchdog wykorzystuje cykliczne
+publikacje `registered`, które komponent SIM800L generuje po odpowiedzi na `AT+CREG?`.
+
+```yaml
+globals:
+  - id: last_modem_response_ms
+    type: uint32_t
+    restore_value: false
+    initial_value: "0"
+  - id: modem_response_seen
+    type: bool
+    restore_value: false
+    initial_value: "false"
+
+interval:
+  - interval: 5s
+    then:
+      - lambda: |-
+          const bool responsive = id(modem_response_seen) &&
+              static_cast<uint32_t>(millis() - id(last_modem_response_ms)) < 30000;
+          id(modem_online).publish_state(responsive);
+
+binary_sensor:
+  - platform: template
+    id: modem_online
+    name: "Modem Online"
+    device_class: connectivity
+
+  - platform: sim800l
+    registered:
+      id: registered
+      name: "Registered"
+      filters:
+        - lambda: |-
+            id(last_modem_response_ms) = millis();
+            id(modem_response_seen) = true;
+            return x;
+```
+
+Zastąp dotychczasową sekcję `binary_sensor: - platform: sim800l` powyższą wersją;
+nie dodawaj drugiego sensora `registered`. Po wyłączeniu SIM800C status zmieni się na
+`OFFLINE (brak odpowiedzi)` w ciągu około 30–35 sekund.
+
+Filtr `lambda` jest celowy: wykonuje się dla każdej odpowiedzi `AT+CREG?`, również
+gdy wartość `registered` nie zmienia się. Zwykłe `on_state` nie nadaje się tutaj,
+ponieważ ESPHome deduplikuje kolejne identyczne stany.
 
 ## Quick Start
 

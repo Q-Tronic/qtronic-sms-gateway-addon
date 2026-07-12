@@ -30,6 +30,9 @@ configuration:
       registered_object_id:
         name: Object ID Registered
         description: Object ID używany do wykrywania rejestracji w sieci.
+      modem_online_object_id:
+        name: Object ID Modem Online
+        description: Object ID watchdoga potwierdzającego odpowiedzi modemu SIM800C.
       sms_sender_object_id:
         name: Object ID nadawcy SMS
         description: Object ID używany do wykrywania nadawcy SMS.

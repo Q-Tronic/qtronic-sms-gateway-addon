@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.8
+
+- Add the ESPHome `modem_online` watchdog role to detect a powered-off or unresponsive SIM800C
+- Distinguish modem `offline`, `not_registered`, `online`, and `unknown` states
+- Publish the Modem Online binary sensor through REST, MQTT discovery, and the bundled integration
+- Document the required ESPHome heartbeat configuration and 30-second timeout
+- Replace placeholder repository URLs with the public GitHub repository URL
+
 ## 0.4.7
 
 - Add separate ESP and SIM800C diagnostic status to the Ingress dashboard and REST status payload

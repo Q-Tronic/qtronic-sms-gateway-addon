@@ -27,6 +27,7 @@ class ESPHomeConfig:
     disconnect_action: str
     rssi_object_id: str
     registered_object_id: str
+    modem_online_object_id: str
     sms_sender_object_id: str
     sms_message_object_id: str
     incoming_call_object_id: str
@@ -136,6 +137,9 @@ def load_config(path: str | Path = "/data/options.json") -> AddonConfig:
             rssi_object_id=str(esphome_data.get("rssi_object_id", "rssi")).strip(),
             registered_object_id=str(
                 esphome_data.get("registered_object_id", "registered")
+            ).strip(),
+            modem_online_object_id=str(
+                esphome_data.get("modem_online_object_id", "modem_online")
             ).strip(),
             sms_sender_object_id=str(
                 esphome_data.get("sms_sender_object_id", "sms_sender")

@@ -121,6 +121,7 @@
         "data": {
           "rssi_object_id": "Nadpisanie object_id dla RSSI",
           "registered_object_id": "Nadpisanie object_id dla Registered",
+          "modem_online_object_id": "Nadpisanie object_id dla Modem Online",
           "sms_sender_object_id": "Nadpisanie object_id dla nadawcy SMS",
           "sms_message_object_id": "Nadpisanie object_id dla treści SMS",
           "incoming_call_object_id": "Nadpisanie object_id dla połączenia przychodzącego",

@@ -1,10 +1,10 @@
 name: Q-Tronic SMS Gateway
-version: 0.4.7
+version: 0.4.8
 slug: qtronic_sms_gateway
 description: >-
   GSM gateway for ESPHome-based SIM800C nodes with Ingress UI, REST API,
   MQTT publish/subscribe, SMS handling, and call control.
-url: https://q-tronic.local/qtronic_sms_gateway
+url: https://github.com/Q-Tronic/qtronic-sms-gateway-addon
 arch:
   - aarch64
   - amd64
@@ -44,6 +44,7 @@ options:
     disconnect_action: disconnect
     rssi_object_id: rssi
     registered_object_id: registered
+    modem_online_object_id: modem_online
     sms_sender_object_id: sms_sender
     sms_message_object_id: sms_message
     incoming_call_object_id: incoming_call
@@ -80,6 +81,7 @@ schema:
     disconnect_action: str
     rssi_object_id: str
     registered_object_id: str
+    modem_online_object_id: str
     sms_sender_object_id: str
     sms_message_object_id: str
     incoming_call_object_id: str

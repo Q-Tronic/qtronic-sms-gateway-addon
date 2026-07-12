@@ -53,6 +53,7 @@ from .const import (
     DOMAIN,
     ROLE_CALL_STATE,
     ROLE_INCOMING_CALL,
+    ROLE_MODEM_ONLINE,
     ROLE_REGISTERED,
     ROLE_RSSI,
     ROLE_SMS_MESSAGE,
@@ -139,6 +140,9 @@ class CallBatchDiagnostics:
 ENTITY_INFOS: dict[str, GatewayEntityInfo] = {
     ROLE_RSSI: GatewayEntityInfo("rssi", "RSSI", "mdi:signal", "dBm", 0),
     ROLE_REGISTERED: GatewayEntityInfo("registered", "Registered", "mdi:sim"),
+    ROLE_MODEM_ONLINE: GatewayEntityInfo(
+        "modem_online", "Modem Online", "mdi:modem"
+    ),
     ROLE_SMS_SENDER: GatewayEntityInfo("sms_sender", "SMS Sender", "mdi:account-arrow-left"),
     ROLE_SMS_MESSAGE: GatewayEntityInfo("sms_message", "SMS Message", "mdi:message-text"),
     ROLE_INCOMING_CALL: GatewayEntityInfo(

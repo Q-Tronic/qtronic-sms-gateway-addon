@@ -30,6 +30,7 @@ from .const import (
     CONF_EXPECTED_MAC,
     CONF_EXPECTED_NAME,
     CONF_INCOMING_CALL_OBJECT_ID,
+    CONF_MODEM_ONLINE_OBJECT_ID,
     CONF_REGISTERED_OBJECT_ID,
     CONF_RSSI_OBJECT_ID,
     CONF_SAVED_RECIPIENTS,
@@ -274,6 +275,10 @@ def entity_mapping_schema(defaults: dict[str, Any]) -> vol.Schema:
             vol.Optional(
                 CONF_REGISTERED_OBJECT_ID,
                 default=defaults.get(CONF_REGISTERED_OBJECT_ID, ""),
+            ): selector.TextSelector(),
+            vol.Optional(
+                CONF_MODEM_ONLINE_OBJECT_ID,
+                default=defaults.get(CONF_MODEM_ONLINE_OBJECT_ID, ""),
             ): selector.TextSelector(),
             vol.Optional(
                 CONF_SMS_SENDER_OBJECT_ID,

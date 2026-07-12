@@ -232,7 +232,7 @@ class MQTTBridge:
             elif event_type == "state_changed":
                 role = event.get("role")
                 await self._publish_state(role, event.get("value"))
-                if role == "registered":
+                if role in {"registered", "modem_online"}:
                     await self._publish_component_status()
             elif event_type == "sms_received":
                 await self._publish_json(self._topic("event/sms_received"), event)
@@ -417,6 +417,19 @@ class MQTTBridge:
                     "state_topic": self._topic("state/rssi"),
                     "unit_of_measurement": "dBm",
                     "icon": "mdi:signal",
+                },
+            ),
+            (
+                "binary_sensor",
+                "modem_online",
+                {
+                    "name": "Q-Tronic Modem Online",
+                    "default_entity_id": "binary_sensor.qtronic_sms_gateway_modem_online",
+                    "state_topic": self._topic("state/modem_online"),
+                    "payload_on": "true",
+                    "payload_off": "false",
+                    "device_class": "connectivity",
+                    "icon": "mdi:modem",
                 },
             ),
             (

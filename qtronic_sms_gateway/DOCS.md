@@ -149,6 +149,56 @@ Add-on publikuje też eventy bezpośrednio do Home Assistant:
 - `qtronic_sms_gateway_sms_batch_finished`
 - `qtronic_sms_gateway_call_batch_finished`
 
+## Polecenia i odpowiedzi SMS
+
+Bundled custom integration pozwala wykonywać bezpieczne polecenia Home Assistant
+na podstawie odebranych wiadomości SMS. Otwórz:
+
+`Ustawienia -> Urządzenia i usługi -> Q-Tronic SMS Gateway -> Konfiguruj -> Polecenia i odpowiedzi SMS`
+
+Każda reguła zawiera:
+
+- zapisanego użytkownika albo ręcznie wpisany dozwolony numer nadawcy
+- wielowyrazową treść polecenia
+- dopasowanie dokładne, `zawiera` albo `zaczyna się od`
+- wyszukiwalną encję Home Assistant wybieraną po nazwie lub `entity_id`
+- operację `włącz`, `wyłącz`, `przełącz` albo `odeślij aktualny stan`
+- opcjonalne odpowiedzi po sukcesie i błędzie
+
+Komendy są porównywane bez uwzględniania wielkości liter, polskich znaków oraz
+nadmiarowych spacji. Przykładowo wszystkie poniższe wiadomości są równoważne:
+
+```text
+WŁĄCZ ŚWIATŁO W GARAŻU
+włącz światło w garażu
+Wlacz   swiatlo   w garazu
+```
+
+Tryb odczytu stanu nie zmienia encji. Przykładowa reguła może reagować na SMS
+`temperatura salon` i odesłać wartość sensora temperatury albo reagować na
+`stan bramy` i zwrócić `otwarta` / `zamknięta`.
+
+Szablony odpowiedzi obsługują następujące zmienne:
+
+- `{zmienna}` - surowa wartość encji, np. `21.5`
+- `{stan}` - czytelny stan, np. `otwarta`, `zamknięta`, `włączony`
+- `{jednostka}` - jednostka encji, np. `°C`
+- `{nazwa_encji}` - przyjazna nazwa encji
+- `{entity_id}` - identyfikator encji
+- `{nadawca}` - nazwa zapisanego użytkownika albo zamaskowany numer
+- `{komenda}` - oryginalna odebrana wiadomość
+
+Przykładowe odpowiedzi:
+
+```text
+Temperatura w salonie to {zmienna} {jednostka}
+Brama jest {stan}
+Wykonano polecenie dla {nazwa_encji}. Nowy stan: {stan}
+```
+
+Pierwsza pasująca reguła jest wykonywana, a identyczne komendy dla tego samego
+nadawcy są blokowane podczas konfiguracji, aby uniknąć niejednoznacznych akcji.
+
 Przykład triggera po SMS:
 
 ```yaml

@@ -31,12 +31,13 @@
     "step": {
       "init": {
         "title": "Q-Tronic SMS Gateway options",
-        "description": "Choose what you want to configure. Saved recipients: {recipient_count}.",
+        "description": "Choose what you want to configure. Saved recipients: {recipient_count}. SMS rules: {rule_count}.",
         "menu_options": {
           "connection": "ESPHome connection",
           "messaging": "SMS sending",
           "calling": "Calling",
           "recipients": "Saved recipients",
+          "sms_commands": "SMS commands and replies",
           "entity_mapping": "Entity mapping",
           "finish": "Save and close"
         }
@@ -115,6 +116,65 @@
           "recipient_id": "Recipients to delete"
         }
       },
+      "sms_commands": {
+        "title": "SMS commands and replies",
+        "description": "Configure entity control and state queries over SMS. The first matching rule is executed.\n\nCurrent rules:\n{rules}",
+        "menu_options": {
+          "add_sms_rule": "Add SMS rule",
+          "edit_sms_rule_select": "Edit SMS rule",
+          "delete_sms_rules": "Delete SMS rules",
+          "init": "Back to main menu"
+        }
+      },
+      "add_sms_rule": {
+        "title": "Add SMS rule",
+        "description": "Messages may contain multiple words. Polish characters, letter case, and repeated whitespace are ignored. Search for an entity by name or entity_id.\n\nA reply template can combine any description with variables: `{zmienna}`, `{stan}`, `{jednostka}`, `{nazwa_encji}`, `{entity_id}`, `{nadawca}`, `{komenda}`. Example: `The living room temperature is {zmienna} degrees`.",
+        "data": {
+          "name": "Rule name",
+          "enabled": "Rule enabled",
+          "sender_mode": "Sender type",
+          "saved_recipient_id": "Saved user",
+          "sender_phone": "Manual sender phone number",
+          "command": "SMS command text",
+          "match_mode": "Message matching mode",
+          "entity_id": "Home Assistant entity",
+          "action": "Operation",
+          "reply_enabled": "Send a reply after success (state reports always reply)",
+          "success_reply": "Success or state reply template",
+          "failure_reply": "Optional failure reply template"
+        }
+      },
+      "edit_sms_rule_select": {
+        "title": "Select SMS rule to edit",
+        "data": {
+          "sms_rule_id": "SMS rule"
+        }
+      },
+      "edit_sms_rule": {
+        "title": "Edit SMS rule",
+        "description": "Change the sender, multi-word command, entity, operation, or reply templates.\n\nA template can contain custom text and variables: `{zmienna}`, `{stan}`, `{jednostka}`, `{nazwa_encji}`, `{entity_id}`, `{nadawca}`, `{komenda}`. Example: `The living room temperature is {zmienna} degrees`.",
+        "data": {
+          "name": "Rule name",
+          "enabled": "Rule enabled",
+          "sender_mode": "Sender type",
+          "saved_recipient_id": "Saved user",
+          "sender_phone": "Manual sender phone number",
+          "command": "SMS command text",
+          "match_mode": "Message matching mode",
+          "entity_id": "Home Assistant entity",
+          "action": "Operation",
+          "reply_enabled": "Send a reply after success (state reports always reply)",
+          "success_reply": "Success or state reply template",
+          "failure_reply": "Optional failure reply template"
+        }
+      },
+      "delete_sms_rules": {
+        "title": "Delete SMS rules",
+        "description": "Select one or more rules to delete.",
+        "data": {
+          "sms_rule_id": "SMS rules"
+        }
+      },
       "entity_mapping": {
         "title": "Entity mapping",
         "description": "Optionally override the object_id values used to auto-detect ESPHome entities.",
@@ -133,10 +193,18 @@
     "error": {
       "cannot_connect": "Cannot connect to the ESPHome device.",
       "invalid_auth": "The ESPHome API encryption key is invalid.",
-      "invalid_recipient": "Check the recipient name and phone number."
+      "invalid_recipient": "Check the recipient name and phone number.",
+      "invalid_sender": "Select an existing saved user or enter a valid sender phone number.",
+      "invalid_rule_name": "Enter an SMS rule name.",
+      "invalid_command": "Enter a valid non-empty command and matching mode.",
+      "entity_not_found": "The selected entity does not exist or is not currently available in Home Assistant.",
+      "unsupported_entity": "The selected entity does not support this operation. Any entity can be selected for state reporting.",
+      "duplicate_sms_rule": "A rule with the same sender, command, and matching mode already exists.",
+      "invalid_reply_template": "The reply template contains invalid syntax or an unsupported variable."
     },
     "abort": {
-      "no_saved_recipients": "There are no saved recipients for this action."
+      "no_saved_recipients": "There are no saved recipients for this action.",
+      "no_sms_rules": "There are no configured SMS rules for this operation."
     }
   },
   "services": {

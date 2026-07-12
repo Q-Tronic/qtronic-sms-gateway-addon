@@ -31,12 +31,13 @@
     "step": {
       "init": {
         "title": "Opcje Q-Tronic SMS Gateway",
-        "description": "Wybierz sekcję do konfiguracji. Zapisani odbiorcy: {recipient_count}.",
+        "description": "Wybierz sekcję do konfiguracji. Zapisani odbiorcy: {recipient_count}. Reguły SMS: {rule_count}.",
         "menu_options": {
           "connection": "Połączenie z ESPHome",
           "messaging": "Wysyłka SMS",
           "calling": "Połączenia",
           "recipients": "Odbiorcy zapisani",
+          "sms_commands": "Polecenia i odpowiedzi SMS",
           "entity_mapping": "Mapowanie encji",
           "finish": "Zapisz i zamknij"
         }
@@ -115,6 +116,65 @@
           "recipient_id": "Odbiorcy do usunięcia"
         }
       },
+      "sms_commands": {
+        "title": "Polecenia i odpowiedzi SMS",
+        "description": "Skonfiguruj sterowanie encjami oraz odczytywanie ich stanu przez SMS. Pierwsza pasująca reguła zostanie wykonana.\n\nAktualne reguły:\n{rules}",
+        "menu_options": {
+          "add_sms_rule": "Dodaj regułę SMS",
+          "edit_sms_rule_select": "Edytuj regułę SMS",
+          "delete_sms_rules": "Usuń reguły SMS",
+          "init": "Wróć do menu głównego"
+        }
+      },
+      "add_sms_rule": {
+        "title": "Dodaj regułę SMS",
+        "description": "Wiadomość może zawierać wiele słów. Polskie znaki, wielkość liter i nadmiarowe spacje są ignorowane. Wyszukaj encję po jej nazwie lub entity_id.\n\nSzablon odpowiedzi może łączyć dowolny opis ze zmiennymi: `{zmienna}`, `{stan}`, `{jednostka}`, `{nazwa_encji}`, `{entity_id}`, `{nadawca}`, `{komenda}`. Przykład: `Temperatura w salonie to {zmienna} stopni`.",
+        "data": {
+          "name": "Nazwa reguły",
+          "enabled": "Reguła włączona",
+          "sender_mode": "Rodzaj nadawcy",
+          "saved_recipient_id": "Zapisany użytkownik",
+          "sender_phone": "Ręcznie wpisany numer telefonu",
+          "command": "Treść polecenia SMS",
+          "match_mode": "Sposób dopasowania wiadomości",
+          "entity_id": "Encja Home Assistant",
+          "action": "Operacja",
+          "reply_enabled": "Wyślij odpowiedź po sukcesie (odczyt stanu zawsze odpowiada)",
+          "success_reply": "Szablon odpowiedzi po sukcesie lub odczycie",
+          "failure_reply": "Opcjonalny szablon odpowiedzi po błędzie"
+        }
+      },
+      "edit_sms_rule_select": {
+        "title": "Wybierz regułę SMS do edycji",
+        "data": {
+          "sms_rule_id": "Reguła SMS"
+        }
+      },
+      "edit_sms_rule": {
+        "title": "Edytuj regułę SMS",
+        "description": "Zmień nadawcę, wielowyrazową komendę, encję, operację lub szablony odpowiedzi.\n\nSzablon może zawierać własny opis i zmienne: `{zmienna}`, `{stan}`, `{jednostka}`, `{nazwa_encji}`, `{entity_id}`, `{nadawca}`, `{komenda}`. Przykład: `Temperatura w salonie to {zmienna} stopni`.",
+        "data": {
+          "name": "Nazwa reguły",
+          "enabled": "Reguła włączona",
+          "sender_mode": "Rodzaj nadawcy",
+          "saved_recipient_id": "Zapisany użytkownik",
+          "sender_phone": "Ręcznie wpisany numer telefonu",
+          "command": "Treść polecenia SMS",
+          "match_mode": "Sposób dopasowania wiadomości",
+          "entity_id": "Encja Home Assistant",
+          "action": "Operacja",
+          "reply_enabled": "Wyślij odpowiedź po sukcesie (odczyt stanu zawsze odpowiada)",
+          "success_reply": "Szablon odpowiedzi po sukcesie lub odczycie",
+          "failure_reply": "Opcjonalny szablon odpowiedzi po błędzie"
+        }
+      },
+      "delete_sms_rules": {
+        "title": "Usuń reguły SMS",
+        "description": "Wybierz jedną lub więcej reguł do usunięcia.",
+        "data": {
+          "sms_rule_id": "Reguły SMS"
+        }
+      },
       "entity_mapping": {
         "title": "Mapowanie encji",
         "description": "Opcjonalnie nadpisz object_id używane do autodetekcji encji ESPHome.",
@@ -133,10 +193,18 @@
     "error": {
       "cannot_connect": "Nie udało się połączyć z urządzeniem ESPHome.",
       "invalid_auth": "Klucz szyfrowania API ESPHome jest nieprawidłowy.",
-      "invalid_recipient": "Sprawdź nazwę i numer telefonu odbiorcy."
+      "invalid_recipient": "Sprawdź nazwę i numer telefonu odbiorcy.",
+      "invalid_sender": "Wybierz istniejącego zapisanego użytkownika albo podaj prawidłowy numer telefonu.",
+      "invalid_rule_name": "Wpisz nazwę reguły SMS.",
+      "invalid_command": "Wpisz prawidłową, niepustą treść polecenia i sposób dopasowania.",
+      "entity_not_found": "Wybrana encja nie istnieje lub jest obecnie niedostępna w Home Assistant.",
+      "unsupported_entity": "Wybrana encja nie obsługuje tej operacji. Do odczytu stanu możesz wybrać dowolną encję.",
+      "duplicate_sms_rule": "Dla tego nadawcy istnieje już reguła z taką samą komendą i sposobem dopasowania.",
+      "invalid_reply_template": "Szablon odpowiedzi zawiera błąd lub nieobsługiwaną zmienną."
     },
     "abort": {
-      "no_saved_recipients": "Brak zapisanych odbiorców do tej operacji."
+      "no_saved_recipients": "Brak zapisanych odbiorców do tej operacji.",
+      "no_sms_rules": "Brak skonfigurowanych reguł SMS do tej operacji."
     }
   },
   "services": {

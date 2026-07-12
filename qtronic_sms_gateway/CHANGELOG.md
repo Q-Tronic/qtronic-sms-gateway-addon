@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.9
+
+- Add native inbound SMS command rules to the bundled Home Assistant integration
+- Select searchable Home Assistant entities by friendly name or entity ID
+- Match multi-word SMS commands while ignoring Polish diacritics, letter case, and repeated whitespace
+- Authorize senders by saved recipient or manually configured phone number
+- Support `turn_on`, `turn_off`, `toggle`, and state-reporting rules
+- Send configurable success, state, and failure replies back to the original sender
+- Add reply variables for entity value, localized state, unit, name, sender, and command
+- Enrich Home Assistant events with add-on and ESPHome gateway source identifiers
+- Fix persistence of the Modem Online entity-mapping override
+
 ## 0.4.8
 
 - Add the ESPHome `modem_online` watchdog role to detect a powered-off or unresponsive SIM800C

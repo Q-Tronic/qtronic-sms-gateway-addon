@@ -51,8 +51,15 @@ class HomeAssistantEventBridge:
         asyncio.create_task(self._fire_event(ha_event_type, event))
 
     async def _fire_event(self, ha_event_type: str, payload: dict[str, object]) -> None:
+        enriched_payload = {
+            **payload,
+            "addon_hostname": os.environ.get("HOSTNAME", "").strip(),
+            "gateway_host": self.gateway.host,
+        }
         try:
-            await asyncio.to_thread(self._fire_event_sync, ha_event_type, payload)
+            await asyncio.to_thread(
+                self._fire_event_sync, ha_event_type, enriched_payload
+            )
         except Exception as err:  # pragma: no cover - runtime logging guard
             _LOGGER.warning("Failed to fire Home Assistant event %s: %s", ha_event_type, err)
 
@@ -76,4 +83,3 @@ class HomeAssistantEventBridge:
             raise RuntimeError(f"HTTP {err.code}: {details or err.reason}") from err
         except urllib_error.URLError as err:  # pragma: no cover - runtime logging guard
             raise RuntimeError(str(err.reason)) from err
-

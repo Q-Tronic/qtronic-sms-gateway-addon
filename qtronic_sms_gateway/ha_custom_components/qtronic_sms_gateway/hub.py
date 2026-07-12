@@ -14,7 +14,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceInfo as HADeviceInfo
 from yarl import URL
@@ -30,7 +29,6 @@ from .const import (
     CONF_DELAY_BETWEEN_CALLS_S,
     CONF_DIAL_ACTION,
     CONF_DISCONNECT_ACTION,
-    CONF_ENCRYPTION_KEY,
     CONF_EXPECTED_MAC,
     CONF_EXPECTED_NAME,
     CONF_SAVED_RECIPIENTS,
@@ -212,6 +210,7 @@ class QTronicSmsGatewayHub:
         self._poll_task: asyncio.Task | None = None
         self._stop_event = asyncio.Event()
         self._last_connect_error: str | None = None
+        self._gateway_host = ""
         self._states: dict[str, Any] = {}
         self._component_status: dict[str, str] = {
             "esp": "offline",
@@ -266,6 +265,11 @@ class QTronicSmsGatewayHub:
             return URL(self.addon_base_url).host or "qtronic-sms-gateway"
         except Exception:
             return "qtronic-sms-gateway"
+
+    @property
+    def gateway_host(self) -> str:
+        """Return the ESPHome host reported by the add-on backend."""
+        return self._gateway_host
 
     @property
     def port(self) -> int:
@@ -599,6 +603,7 @@ class QTronicSmsGatewayHub:
             or "Q-Tronic SMS Gateway"
         )
         self._last_connect_error = payload.get("last_connect_error")
+        self._gateway_host = str(payload.get("host") or "")
         self._queue_depth = int(payload.get("queue_depth") or 0)
         self._active_job_kind = payload.get("active_job_kind")
         self._active_job_id = payload.get("active_job_id")

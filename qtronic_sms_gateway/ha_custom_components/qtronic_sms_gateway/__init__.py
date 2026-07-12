@@ -31,6 +31,7 @@ from .const import (
 from .hub import GatewayAuthenticationError, GatewayConnectionError, QTronicSmsGatewayHub
 from .recipients import deduplicate_phone_numbers, mask_phone_number
 from .restart_issue import async_sync_restart_issue
+from .sms_commands import SmsCommandRuleEngine
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -228,7 +229,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         name=entry.title or "Q-Tronic SMS Gateway",
     )
 
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    try:
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    except Exception:
+        hass.data[DOMAIN].pop(entry.entry_id, None)
+        await hub.async_stop()
+        raise
+
+    command_engine = SmsCommandRuleEngine(hass, hub)
+    await command_engine.async_start()
+    hub.sms_command_engine = command_engine
     return True
 
 
@@ -236,6 +246,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     hub: QTronicSmsGatewayHub = entry.runtime_data
+    command_engine = getattr(hub, "sms_command_engine", None)
+    if command_engine is not None:
+        await command_engine.async_stop()
     await hub.async_stop()
     hass.data[DOMAIN].pop(entry.entry_id, None)
     return unload_ok

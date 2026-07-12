@@ -18,6 +18,7 @@ CONF_DIAL_ACTION = "dial_action"
 CONF_DISCONNECT_ACTION = "disconnect_action"
 CONF_SMS_ENCODING = "sms_encoding"
 CONF_SAVED_RECIPIENTS = "saved_recipients"
+CONF_SMS_COMMAND_RULES = "sms_command_rules"
 CONF_SEND_DELAY_MS = "send_delay_ms"
 CONF_DEFAULT_RING_TIME_S = "default_ring_time_s"
 CONF_DELAY_BETWEEN_CALLS_S = "delay_between_calls_s"
@@ -94,6 +95,49 @@ EVENT_ATTR_CALLER = "caller"
 EVENT_ATTR_CALLER_NORMALIZED = "caller_normalized"
 EVENT_ATTR_MESSAGE = "message"
 EVENT_ATTR_MESSAGE_SEARCH = "message_search"
+EVENT_ATTR_ADDON_HOSTNAME = "addon_hostname"
+EVENT_ATTR_GATEWAY_HOST = "gateway_host"
+
+EVENT_SMS_COMMAND_EXECUTED = "qtronic_sms_gateway_command_executed"
+EVENT_SMS_COMMAND_FAILED = "qtronic_sms_gateway_command_failed"
+
+SMS_RULE_ID = "id"
+SMS_RULE_NAME = "name"
+SMS_RULE_ENABLED = "enabled"
+SMS_RULE_SENDER_MODE = "sender_mode"
+SMS_RULE_SAVED_RECIPIENT_ID = "saved_recipient_id"
+SMS_RULE_SENDER_PHONE = "sender_phone"
+SMS_RULE_COMMAND = "command"
+SMS_RULE_MATCH_MODE = "match_mode"
+SMS_RULE_ACTION = "action"
+SMS_RULE_ENTITY_ID = "entity_id"
+SMS_RULE_REPLY_ENABLED = "reply_enabled"
+SMS_RULE_SUCCESS_REPLY = "success_reply"
+SMS_RULE_FAILURE_REPLY = "failure_reply"
+
+SMS_RULE_SENDER_SAVED = "saved"
+SMS_RULE_SENDER_MANUAL = "manual"
+SMS_RULE_SENDER_MODES = (SMS_RULE_SENDER_SAVED, SMS_RULE_SENDER_MANUAL)
+
+SMS_RULE_MATCH_EXACT = "exact"
+SMS_RULE_MATCH_CONTAINS = "contains"
+SMS_RULE_MATCH_STARTS_WITH = "starts_with"
+SMS_RULE_MATCH_MODES = (
+    SMS_RULE_MATCH_EXACT,
+    SMS_RULE_MATCH_CONTAINS,
+    SMS_RULE_MATCH_STARTS_WITH,
+)
+
+SMS_RULE_ACTION_TURN_ON = "turn_on"
+SMS_RULE_ACTION_TURN_OFF = "turn_off"
+SMS_RULE_ACTION_TOGGLE = "toggle"
+SMS_RULE_ACTION_REPORT_STATE = "report_state"
+SMS_RULE_ACTIONS = (
+    SMS_RULE_ACTION_TURN_ON,
+    SMS_RULE_ACTION_TURN_OFF,
+    SMS_RULE_ACTION_TOGGLE,
+    SMS_RULE_ACTION_REPORT_STATE,
+)
 
 TRIGGER_SMS_RECEIVED = "sms_received"
 TRIGGER_INCOMING_CALL = "incoming_call"

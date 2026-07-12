@@ -10,7 +10,7 @@ from typing import Any
 from uuid import uuid4
 
 from homeassistant.const import ATTR_ENTITY_ID, ATTR_FRIENDLY_NAME, STATE_OFF, STATE_ON
-from homeassistant.core import Event, HomeAssistant, State
+from homeassistant.core import Event, HomeAssistant, State, callback
 from homeassistant.exceptions import HomeAssistantError
 
 from .const import (
@@ -344,7 +344,9 @@ class SmsCommandRuleEngine:
             await asyncio.gather(*tasks, return_exceptions=True)
         self._tasks.clear()
 
+    @callback
     def _handle_sms_event(self, event: Event) -> None:
+        """Schedule rule processing from the Home Assistant event loop."""
         task = self.hass.async_create_task(self._async_process_sms(event))
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)

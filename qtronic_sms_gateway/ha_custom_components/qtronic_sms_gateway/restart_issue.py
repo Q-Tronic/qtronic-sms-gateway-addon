@@ -52,7 +52,7 @@ async def async_sync_restart_issue(hass: HomeAssistant) -> None:
     """Create or clear the restart-required repair issue based on the sync marker."""
     marker_path = _marker_path(hass)
     marker = await hass.async_add_executor_job(_read_marker, marker_path)
-    current_version = _current_component_version()
+    current_version = await hass.async_add_executor_job(_current_component_version)
 
     if marker is None:
         ir.async_delete_issue(hass, DOMAIN, ISSUE_ID_RESTART_REQUIRED)

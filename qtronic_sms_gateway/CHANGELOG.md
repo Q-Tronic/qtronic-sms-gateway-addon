@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.10
+
+- Fix inbound SMS command listeners being dispatched to a worker thread on Home Assistant 2026.7
+- Schedule SMS rule processing safely on the Home Assistant event loop
+- Move custom-integration manifest reads out of the event loop to avoid blocking-I/O warnings
+
 ## 0.4.9
 
 - Add native inbound SMS command rules to the bundled Home Assistant integration

@@ -235,9 +235,17 @@ SMS: {wiadomosc}
 POŁĄCZENIE OD: {dzwoniacy}
 ```
 
-Dostępne zmienne to `{data_czas}`, `{nadawca}`, `{nazwa_nadawcy}`,
-`{wiadomosc}`, `{dzwoniacy}` oraz `{typ}`. Powiadomienie o połączeniu jest
-wiadomością SMS; nie jest przekierowaniem rozmowy w sieci GSM.
+Dostępne zmienne:
+
+- `{data_czas}` - data i czas odebrania wiadomości lub połączenia w lokalnej strefie Home Assistanta
+- `{nadawca}` - numer telefonu nadawcy SMS-a lub osoby dzwoniącej
+- `{nazwa_nadawcy}` - nazwa zapisanego nadawcy lub jego numer
+- `{wiadomosc}` - oryginalna treść odebranego SMS-a
+- `{dzwoniacy}` - numer telefonu osoby dzwoniącej
+- `{typ}` - rodzaj zdarzenia: `SMS` albo `POŁĄCZENIE`
+
+Powiadomienie o połączeniu jest wiadomością SMS; nie jest przekierowaniem
+rozmowy w sieci GSM.
 
 Po zapisaniu tej konfiguracji wyłącz lub usuń wcześniejszą automatyzację
 forwardującą, aby nie otrzymywać zdublowanych powiadomień.

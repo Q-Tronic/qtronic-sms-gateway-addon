@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.13
+
+- Show every template variable on a separate line in the integration UI
+- Add concise runtime-accurate descriptions and examples for command and forwarding template variables
+
 ## 0.4.12
 
 - Add the `{data_czas}` variable to success, state, and failure SMS reply templates

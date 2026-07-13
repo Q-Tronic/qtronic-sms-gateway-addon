@@ -1,5 +1,5 @@
 name: Q-Tronic SMS Gateway
-version: 0.4.12
+version: 0.4.13
 slug: qtronic_sms_gateway
 description: >-
   GSM gateway for ESPHome-based SIM800C nodes with Ingress UI, REST API,

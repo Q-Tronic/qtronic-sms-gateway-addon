@@ -119,7 +119,7 @@
       },
       "forwarding": {
         "title": "SMS and call forwarding",
-        "description": "Forward received messages and incoming-call notifications to selected saved recipients. The integration always removes the source number from the target list, so it never sends a copy back to the sender. Messages recognized as commands are not forwarded by default.\n\nTemplate variables: `{data_czas}`, `{nadawca}`, `{nazwa_nadawcy}`, `{wiadomosc}`, `{dzwoniacy}`, `{typ}`.",
+        "description": "Forward received messages and incoming-call notifications to selected saved recipients. The integration always removes the source number from the target list, so it never sends a copy back to the sender. Messages recognized as commands are not forwarded by default.\n\nTemplate variables:\n\n- `{data_czas}` — date and time the message or call was received in the Home Assistant local time zone\n- `{nadawca}` — SMS sender or incoming caller phone number\n- `{nazwa_nadawcy}` — saved sender name, or their phone number\n- `{wiadomosc}` — original received SMS text\n- `{dzwoniacy}` — incoming caller phone number\n- `{typ}` — event type: `SMS` or `POŁĄCZENIE`",
         "data": {
           "forward_sms_enabled": "Forward received SMS messages",
           "forward_calls_enabled": "Send an SMS notification for incoming calls",
@@ -143,7 +143,7 @@
       },
       "add_sms_rule": {
         "title": "Add SMS rule",
-        "description": "Messages may contain multiple words. Polish characters, letter case, and repeated whitespace are ignored. Search for an entity by name or entity_id.\n\nA reply template can combine any description with variables: `{data_czas}`, `{zmienna}`, `{stan}`, `{jednostka}`, `{nazwa_encji}`, `{entity_id}`, `{nadawca}`, `{komenda}`. Example:\n`{data_czas}`\n`The living room temperature is {stan} {jednostka}`.",
+        "description": "Messages may contain multiple words. Polish characters, letter case, and repeated whitespace are ignored. Search for an entity by name or entity_id.\n\nReply template variables:\n\n- `{data_czas}` — date and time reply sending starts in the Home Assistant local time zone\n- `{zmienna}` — raw entity value, for example `23.4`, `on`, or `off`\n- `{stan}` — readable entity state, for example `otwarta`, `włączony`, or `23.4`\n- `{jednostka}` — measurement unit, for example `°C`; empty if the entity has none\n- `{nazwa_encji}` — friendly entity name, or its identifier\n- `{entity_id}` — full entity identifier, for example `sensor.temperatura_salon`\n- `{nadawca}` — saved user name, or a masked phone number\n- `{komenda}` — original received SMS command text\n\nExample:\n\n```text\n{data_czas}\nThe living room temperature is {stan} {jednostka}\n```",
         "data": {
           "name": "Rule name",
           "enabled": "Rule enabled",
@@ -167,7 +167,7 @@
       },
       "edit_sms_rule": {
         "title": "Edit SMS rule",
-        "description": "Change the sender, multi-word command, entity, operation, or reply templates.\n\nA template can contain custom text and variables: `{data_czas}`, `{zmienna}`, `{stan}`, `{jednostka}`, `{nazwa_encji}`, `{entity_id}`, `{nadawca}`, `{komenda}`. Example:\n`{data_czas}`\n`The living room temperature is {stan} {jednostka}`.",
+        "description": "Change the sender, multi-word command, entity, operation, or reply templates.\n\nReply template variables:\n\n- `{data_czas}` — date and time reply sending starts in the Home Assistant local time zone\n- `{zmienna}` — raw entity value, for example `23.4`, `on`, or `off`\n- `{stan}` — readable entity state, for example `otwarta`, `włączony`, or `23.4`\n- `{jednostka}` — measurement unit, for example `°C`; empty if the entity has none\n- `{nazwa_encji}` — friendly entity name, or its identifier\n- `{entity_id}` — full entity identifier, for example `sensor.temperatura_salon`\n- `{nadawca}` — saved user name, or a masked phone number\n- `{komenda}` — original received SMS command text\n\nExample:\n\n```text\n{data_czas}\nThe living room temperature is {stan} {jednostka}\n```",
         "data": {
           "name": "Rule name",
           "enabled": "Rule enabled",

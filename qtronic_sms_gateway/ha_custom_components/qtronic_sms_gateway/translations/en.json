@@ -143,7 +143,7 @@
       },
       "add_sms_rule": {
         "title": "Add SMS rule",
-        "description": "Messages may contain multiple words. Polish characters, letter case, and repeated whitespace are ignored. Search for an entity by name or entity_id.\n\nA reply template can combine any description with variables: `{zmienna}`, `{stan}`, `{jednostka}`, `{nazwa_encji}`, `{entity_id}`, `{nadawca}`, `{komenda}`. Example: `The living room temperature is {zmienna} degrees`.",
+        "description": "Messages may contain multiple words. Polish characters, letter case, and repeated whitespace are ignored. Search for an entity by name or entity_id.\n\nA reply template can combine any description with variables: `{data_czas}`, `{zmienna}`, `{stan}`, `{jednostka}`, `{nazwa_encji}`, `{entity_id}`, `{nadawca}`, `{komenda}`. Example:\n`{data_czas}`\n`The living room temperature is {stan} {jednostka}`.",
         "data": {
           "name": "Rule name",
           "enabled": "Rule enabled",
@@ -167,7 +167,7 @@
       },
       "edit_sms_rule": {
         "title": "Edit SMS rule",
-        "description": "Change the sender, multi-word command, entity, operation, or reply templates.\n\nA template can contain custom text and variables: `{zmienna}`, `{stan}`, `{jednostka}`, `{nazwa_encji}`, `{entity_id}`, `{nadawca}`, `{komenda}`. Example: `The living room temperature is {zmienna} degrees`.",
+        "description": "Change the sender, multi-word command, entity, operation, or reply templates.\n\nA template can contain custom text and variables: `{data_czas}`, `{zmienna}`, `{stan}`, `{jednostka}`, `{nazwa_encji}`, `{entity_id}`, `{nadawca}`, `{komenda}`. Example:\n`{data_czas}`\n`The living room temperature is {stan} {jednostka}`.",
         "data": {
           "name": "Rule name",
           "enabled": "Rule enabled",

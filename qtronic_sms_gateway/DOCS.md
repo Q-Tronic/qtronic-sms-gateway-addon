@@ -180,6 +180,7 @@ Tryb odczytu stanu nie zmienia encji. Przykładowa reguła może reagować na SM
 
 Szablony odpowiedzi obsługują następujące zmienne:
 
+- `{data_czas}` - data i czas wysłania odpowiedzi w lokalnej strefie Home Assistanta
 - `{zmienna}` - surowa wartość encji, np. `21.5`
 - `{stan}` - czytelny stan, np. `otwarta`, `zamknięta`, `włączony`
 - `{jednostka}` - jednostka encji, np. `°C`
@@ -191,6 +192,9 @@ Szablony odpowiedzi obsługują następujące zmienne:
 Przykładowe odpowiedzi:
 
 ```text
+{data_czas}
+Temperatura w salonie: {stan} {jednostka}
+
 Temperatura w salonie to {zmienna} {jednostka}
 Brama jest {stan}
 Wykonano polecenie dla {nazwa_encji}. Nowy stan: {stan}

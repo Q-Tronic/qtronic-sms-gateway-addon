@@ -12,6 +12,7 @@ from uuid import uuid4
 from homeassistant.const import ATTR_ENTITY_ID, ATTR_FRIENDLY_NAME, STATE_OFF, STATE_ON
 from homeassistant.core import Event, HomeAssistant, State, callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.util import dt as dt_util
 
 from .const import (
     EVENT_ATTR_GATEWAY_HOST,
@@ -47,8 +48,8 @@ from .const import (
     SMS_RULE_SENDER_SAVED,
     SMS_RULE_SUCCESS_REPLY,
 )
-from .hub import QTronicSmsGatewayHub
 from .event_source import event_belongs_to_hub
+from .hub import QTronicSmsGatewayHub
 from .recipients import (
     SavedRecipient,
     mask_phone_number,
@@ -65,6 +66,7 @@ DEFAULT_FAILURE_REPLY = "Nie udało się wykonać polecenia dla {nazwa_encji}."
 
 REPLY_TEMPLATE_FIELDS = frozenset(
     {
+        "data_czas",
         "zmienna",
         "stan",
         "jednostka",
@@ -282,6 +284,7 @@ def _localized_state(state: State) -> str:
 def reply_template_values(
     state: State,
     *,
+    data_czas: str,
     sender_name: str,
     command: str,
 ) -> dict[str, str]:
@@ -289,6 +292,7 @@ def reply_template_values(
     unit = str(state.attributes.get("unit_of_measurement", "") or "")
     entity_name = str(state.attributes.get(ATTR_FRIENDLY_NAME) or state.entity_id)
     return {
+        "data_czas": data_czas,
         "zmienna": state.state,
         "stan": _localized_state(state),
         "jednostka": unit,
@@ -303,6 +307,11 @@ def render_reply_template(template: str, values: dict[str, str]) -> str:
     """Render a pre-validated SMS reply template."""
     validate_reply_template(template)
     return template.format_map(values).strip()
+
+
+def _reply_time_text() -> str:
+    """Return the current time in Home Assistant's local time zone."""
+    return dt_util.now().strftime("%d.%m.%Y - %H:%M:%S")
 
 
 class SmsCommandRuleEngine:
@@ -410,7 +419,11 @@ class SmsCommandRuleEngine:
 
         if state is None:
             await self._async_rule_failed(
-                rule, sender, message, sender_name, "Target entity was not found."
+                rule,
+                sender,
+                message,
+                sender_name,
+                "Target entity was not found.",
             )
             return
 
@@ -444,21 +457,6 @@ class SmsCommandRuleEngine:
                     rule, state
                 )
 
-            values = reply_template_values(
-                state,
-                sender_name=sender_name,
-                command=message,
-            )
-            reply_template = (
-                rule.success_reply
-                or (
-                    DEFAULT_STATE_REPLY
-                    if rule.action == SMS_RULE_ACTION_REPORT_STATE
-                    else DEFAULT_SUCCESS_REPLY
-                )
-            )
-            reply = render_reply_template(reply_template, values)
-
             self.hass.bus.async_fire(
                 EVENT_SMS_COMMAND_EXECUTED,
                 {
@@ -478,6 +476,21 @@ class SmsCommandRuleEngine:
             )
             if rule.reply_enabled or rule.action == SMS_RULE_ACTION_REPORT_STATE:
                 try:
+                    values = reply_template_values(
+                        state,
+                        data_czas=_reply_time_text(),
+                        sender_name=sender_name,
+                        command=message,
+                    )
+                    reply_template = (
+                        rule.success_reply
+                        or (
+                            DEFAULT_STATE_REPLY
+                            if rule.action == SMS_RULE_ACTION_REPORT_STATE
+                            else DEFAULT_SUCCESS_REPLY
+                        )
+                    )
+                    reply = render_reply_template(reply_template, values)
                     async with asyncio.timeout(120):
                         await self.hub.async_send_sms(
                             message=reply, recipient=sender
@@ -490,7 +503,12 @@ class SmsCommandRuleEngine:
                     )
         except Exception as err:  # pragma: no cover - runtime service errors
             await self._async_rule_failed(
-                rule, sender, message, sender_name, str(err), state
+                rule,
+                sender,
+                message,
+                sender_name,
+                str(err),
+                state,
             )
 
     async def _async_wait_for_expected_state(
@@ -550,14 +568,17 @@ class SmsCommandRuleEngine:
         try:
             if state is None:
                 state = self.hass.states.get(rule.entity_id)
+            data_czas = _reply_time_text()
             values = (
                 reply_template_values(
                     state,
+                    data_czas=data_czas,
                     sender_name=sender_name,
                     command=message,
                 )
                 if state is not None
                 else {
+                    "data_czas": data_czas,
                     "zmienna": "nieznana",
                     "stan": "nieznany",
                     "jednostka": "",

@@ -143,7 +143,7 @@
       },
       "add_sms_rule": {
         "title": "Dodaj regułę SMS",
-        "description": "Wiadomość może zawierać wiele słów. Polskie znaki, wielkość liter i nadmiarowe spacje są ignorowane. Wyszukaj encję po jej nazwie lub entity_id.\n\nSzablon odpowiedzi może łączyć dowolny opis ze zmiennymi: `{zmienna}`, `{stan}`, `{jednostka}`, `{nazwa_encji}`, `{entity_id}`, `{nadawca}`, `{komenda}`. Przykład: `Temperatura w salonie to {zmienna} stopni`.",
+        "description": "Wiadomość może zawierać wiele słów. Polskie znaki, wielkość liter i nadmiarowe spacje są ignorowane. Wyszukaj encję po jej nazwie lub entity_id.\n\nSzablon odpowiedzi może łączyć dowolny opis ze zmiennymi: `{data_czas}`, `{zmienna}`, `{stan}`, `{jednostka}`, `{nazwa_encji}`, `{entity_id}`, `{nadawca}`, `{komenda}`. Przykład:\n`{data_czas}`\n`Temperatura w salonie: {stan} {jednostka}`.",
         "data": {
           "name": "Nazwa reguły",
           "enabled": "Reguła włączona",
@@ -167,7 +167,7 @@
       },
       "edit_sms_rule": {
         "title": "Edytuj regułę SMS",
-        "description": "Zmień nadawcę, wielowyrazową komendę, encję, operację lub szablony odpowiedzi.\n\nSzablon może zawierać własny opis i zmienne: `{zmienna}`, `{stan}`, `{jednostka}`, `{nazwa_encji}`, `{entity_id}`, `{nadawca}`, `{komenda}`. Przykład: `Temperatura w salonie to {zmienna} stopni`.",
+        "description": "Zmień nadawcę, wielowyrazową komendę, encję, operację lub szablony odpowiedzi.\n\nSzablon może zawierać własny opis i zmienne: `{data_czas}`, `{zmienna}`, `{stan}`, `{jednostka}`, `{nazwa_encji}`, `{entity_id}`, `{nadawca}`, `{komenda}`. Przykład:\n`{data_czas}`\n`Temperatura w salonie: {stan} {jednostka}`.",
         "data": {
           "name": "Nazwa reguły",
           "enabled": "Reguła włączona",

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.12
+
+- Add the `{data_czas}` variable to success, state, and failure SMS reply templates
+- Format the reply dispatch time in the Home Assistant local time zone
+
 ## 0.4.11
 
 - Add native inbound SMS and incoming-call forwarding to the bundled Home Assistant integration

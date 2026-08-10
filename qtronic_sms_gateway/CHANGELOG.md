@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.15
+
+- Replace the ESP8266 busy-wait software-UART receiver with edge-buffered EspSoftwareSerial 8.0.1
+- Decode SIM800C UART frames outside interrupt context and keep Wi-Fi interrupts enabled during transmission
+- Add a 1024-entry RX edge buffer and preserve no-op software-UART flush semantics
+- Keep hardware UART paths and the ESP32 implementation unchanged
+
 ## 0.4.14
 
 - Add reproducible ESPHome 2026.7.4 local components for SIM800L timeout recovery and mitigation of observed ESP8266 software-UART watchdog resets

@@ -356,6 +356,10 @@ async def to_code(config):
     if CORE.is_esp8266:
         from esphome.components.esp8266.const import enable_serial, enable_serial1
 
+        # The Q-Tronic ESP8266 software-UART backend uses the edge-buffered
+        # EspSoftwareSerial library bundled with the Arduino core.
+        cg.add_library("EspSoftwareSerial", "8.0.1")
+
         tx_num = config[CONF_TX_PIN][CONF_NUMBER] if CONF_TX_PIN in config else None
         rx_num = config[CONF_RX_PIN][CONF_NUMBER] if CONF_RX_PIN in config else None
 

@@ -9,10 +9,12 @@ Są oparte na źródłach ESPHome 2026.7.4 i objęte licencjami opisanymi w
 - `sim800l` ma 15-sekundowy timeout maszyny stanów, dzięki czemu brak odpowiedzi
   modemu nie blokuje jej bez końca. Udostępnia też czas ostatniej rzeczywistej
   odpowiedzi przez `get_last_response_ms()`.
-- `uart` zachowuje standardowy sterownik ESPHome, ale na ESP8266 nie włącza
-  `USE_UART_WAKE_LOOP_ON_RX`. Programowy UART nadal odbiera wszystkie bajty do
-  bufora, lecz nie wywołuje planisty sieci z ISR po każdym bajcie. Poprawka jest
-  przeznaczona dla bramki pracującej na GPIO14/GPIO13 przy 9600 baud.
+- `uart` zastępuje fallback programowego UART-u ESP8266 biblioteką
+  `EspSoftwareSerial` 8.0.1. ISR zapisuje tylko poziom i czas zbocza do bufora,
+  a dekodowanie ramki odbywa się w zwykłej pętli. Usuwa to aktywne oczekiwanie
+  przez prawie całą ramkę UART wewnątrz przerwania. Transmisja pozostawia
+  przerwania włączone, a `USE_UART_WAKE_LOOP_ON_RX` nie jest dodawane na ESP8266.
+  Wariant jest przeznaczony dla GPIO14/GPIO13 przy 9600 baud.
 
 ## Użycie
 

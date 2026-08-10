@@ -25,8 +25,10 @@ zarejestrowany (np. brak karty SIM, zasięgu albo problem operatora).
 Dla NodeMCU ESP8266 z SIM800C na GPIO14/GPIO13 użyj komponentów z katalogu
 [`esphome_components`](https://github.com/Q-Tronic/qtronic-sms-gateway-addon/tree/main/esphome_components).
 Lokalny `sim800l` potrafi wyjść z oczekiwania na odpowiedź po zaniku zasilania
-modemu. Lokalny `uart` wyłącza na ESP8266 wybudzanie planisty sieci z przerwania
-po każdym odebranym bajcie; odbiór UART i bufor pozostają aktywne.
+modemu. Lokalny `uart` używa na ESP8266 biblioteki `EspSoftwareSerial` 8.0.1:
+przerwanie zapisuje wyłącznie znaczniki zboczy, a dekodowanie pełnej ramki
+odbywa się poza ISR. Dzięki temu odbiór SIM800C nie blokuje obsługi Wi-Fi przez
+około 1 ms na każdy bajt. Transmisja również pozostawia przerwania włączone.
 
 Komponenty są oparte i zweryfikowane z ESPHome `2026.7.4`. Po aktualizacji
 Device Buildera do innej wersji trzeba porównać je z odpowiadającymi źródłami

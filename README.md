@@ -9,10 +9,15 @@ Repo zawiera:
 - backend pod ESPHome Native API
 - REST API
 - MQTT publish/subscribe do sterowania i zdarzeń
+- odtwarzalne komponenty ESPHome dla stabilnej obsługi ESP8266 + SIM800C
 
 Folder add-onu:
 
 - `qtronic_sms_gateway`
+
+Komponenty firmware ESPHome:
+
+- [`esphome_components`](esphome_components)
 
 Dodanie jako lokalne repo:
 

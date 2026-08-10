@@ -8,3 +8,6 @@ Add-on dla Home Assistant Supervisor, który łączy się z węzłem ESPHome prz
 - obsługę wysyłki SMS
 - obsługę połączeń
 - publikację zdarzeń przychodzących
+
+Dokumentacja zawiera również sprawdzoną konfigurację lokalnych komponentów
+ESPHome dla stabilnej pracy NodeMCU ESP8266 z modemem SIM800C na GPIO14/GPIO13.

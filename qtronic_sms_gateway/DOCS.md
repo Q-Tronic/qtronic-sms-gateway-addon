@@ -20,29 +20,64 @@ Status `SIM800C: ONLINE` oznacza, że modem odpowiada i jest zarejestrowany w si
 30 sekund. `OFFLINE / brak rejestracji` oznacza, że modem odpowiada, ale nie jest
 zarejestrowany (np. brak karty SIM, zasięgu albo problem operatora).
 
-## Watchdog zasilania i odpowiedzi SIM800C
+## Stabilniejszy UART i watchdog odpowiedzi SIM800C
 
-Do konfiguracji ESPHome dodaj poniższe sekcje. Watchdog wykorzystuje cykliczne
-publikacje `registered`, które komponent SIM800L generuje po odpowiedzi na `AT+CREG?`.
+Dla NodeMCU ESP8266 z SIM800C na GPIO14/GPIO13 użyj komponentów z katalogu
+[`esphome_components`](https://github.com/Q-Tronic/qtronic-sms-gateway-addon/tree/main/esphome_components).
+Lokalny `sim800l` potrafi wyjść z oczekiwania na odpowiedź po zaniku zasilania
+modemu. Lokalny `uart` wyłącza na ESP8266 wybudzanie planisty sieci z przerwania
+po każdym odebranym bajcie; odbiór UART i bufor pozostają aktywne.
+
+Komponenty są oparte i zweryfikowane z ESPHome `2026.7.4`. Po aktualizacji
+Device Buildera do innej wersji trzeba porównać je z odpowiadającymi źródłami
+ESPHome, ponownie skompilować firmware i wykonać test zaniku zasilania modemu.
+
+Skopiuj cały katalog obok YAML-a ESPHome i dodaj:
 
 ```yaml
-globals:
-  - id: last_modem_response_ms
-    type: uint32_t
-    restore_value: false
-    initial_value: "0"
-  - id: modem_response_seen
-    type: bool
-    restore_value: false
-    initial_value: "false"
+external_components:
+  - source:
+      type: local
+      path: esphome_components
+    components:
+      - sim800l
+      - uart
+```
 
+Skonfiguruj programowy UART z podciągnięciem RX. Nie używaj równolegle
+`uart.debug` ani własnych cyklicznych komend `AT`, ponieważ konkurują one z
+maszyną stanów komponentu SIM800L.
+
+```yaml
+uart:
+  id: sim800_uart
+  tx_pin: GPIO14
+  rx_pin:
+    number: GPIO13
+    mode:
+      input: true
+      pullup: true
+  baud_rate: 9600
+```
+
+Watchdog korzysta z czasu ostatniej rzeczywistej linii odebranej z modemu,
+a nie ze zmiany stanu rejestracji:
+
+```yaml
 interval:
-  - interval: 5s
+  - interval: 10s
     then:
       - lambda: |-
-          const bool responsive = id(modem_response_seen) &&
-              static_cast<uint32_t>(millis() - id(last_modem_response_ms)) < 30000;
-          id(modem_online).publish_state(responsive);
+          const uint32_t last_response =
+              id(sim800_modem).get_last_response_ms();
+          const bool responsive =
+              last_response != 0 &&
+              static_cast<uint32_t>(millis() - last_response) < 30000;
+
+          if (!id(modem_online).has_state() ||
+              id(modem_online).state != responsive) {
+            id(modem_online).publish_state(responsive);
+          }
 
 binary_sensor:
   - platform: template
@@ -54,24 +89,24 @@ binary_sensor:
     registered:
       id: registered
       name: "Registered"
-      filters:
-        - lambda: |-
-            id(last_modem_response_ms) = millis();
-            id(modem_response_seen) = true;
-            return x;
+
+sim800l:
+  id: sim800_modem
+  uart_id: sim800_uart
+  update_interval: 10s
 ```
 
-Zastąp dotychczasową sekcję `binary_sensor: - platform: sim800l` powyższą wersją;
-nie dodawaj drugiego sensora `registered`. Po wyłączeniu SIM800C status zmieni się na
-`OFFLINE (brak odpowiedzi)` w ciągu około 30–35 sekund.
-
-Filtr `lambda` jest celowy: wykonuje się dla każdej odpowiedzi `AT+CREG?`, również
-gdy wartość `registered` nie zmienia się. Zwykłe `on_state` nie nadaje się tutaj,
-ponieważ ESPHome deduplikuje kolejne identyczne stany.
+Nie dodawaj drugiego sensora `registered`. Usuń starszy filtr, który aktualizował
+watchdog przy każdej publikacji `registered`: stan `false` może pochodzić z
+wewnętrznego timeoutu i nie dowodzi, że modem odpowiedział. Po utracie odpowiedzi
+`Modem Online` przejdzie na `OFF` najpóźniej po około 30–40 sekundach. Powrót
+zasilania modemu nie powoduje okresowego restartowania ESP; lokalny komponent
+resetuje wyłącznie własną maszynę stanów.
 
 ## Quick Start
 
-1. Wgraj firmware ESPHome z akcjami:
+1. Skopiuj lokalne komponenty `sim800l` i `uart`, a następnie wgraj firmware
+   ESPHome z akcjami:
    - `send_sms`
    - `send_sms_unicode`
    - `dial`
@@ -380,3 +415,5 @@ Add-on jest teraz backendem i menedżerem integracji:
 - Home Assistant app configuration: https://developers.home-assistant.io/docs/apps/configuration/
 - Home Assistant app repository: https://developers.home-assistant.io/docs/add-ons/repository
 - ESPHome SIM800L: https://esphome.io/components/sim800l/
+- ESPHome UART: https://esphome.io/components/uart/
+- Lokalne komponenty Q-Tronic: https://github.com/Q-Tronic/qtronic-sms-gateway-addon/tree/main/esphome_components

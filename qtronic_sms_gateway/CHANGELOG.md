@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.14
+
+- Add reproducible ESPHome 2026.7.4 local components for SIM800L timeout recovery and mitigation of observed ESP8266 software-UART watchdog resets
+- Disable per-byte network-loop wakeups from the ESP8266 software-UART ISR while preserving buffered UART reception
+- Replace the legacy `registered` filter watchdog documentation with a last-real-modem-response watchdog
+- Document the tested GPIO14/GPIO13 UART setup and conflicting recovery patterns to avoid
+
 ## 0.4.13
 
 - Show every template variable on a separate line in the integration UI

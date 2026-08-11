@@ -11,11 +11,10 @@ jobs:
   python:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
-          cache: pip
       - name: Install test dependencies
         run: >-
           python -m pip install
@@ -47,7 +46,7 @@ jobs:
   addon-build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build amd64 add-on image
         run: |
           version="$(awk '/^version:/{print $2; exit}' qtronic_sms_gateway/config.yaml)"

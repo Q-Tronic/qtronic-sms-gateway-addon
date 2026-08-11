@@ -105,10 +105,24 @@ from .sms import normalize_inbound_text
 _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_SUCCESS_REPLY = "Wykonano: {nazwa_encji} = {stan}"
-DEFAULT_STATE_REPLY = "{nazwa_encji}: {stan} {jednostka}"
+DEFAULT_STATE_REPLY = "{wynik}"
 DEFAULT_FAILURE_REPLY = "Nie udało się wykonać polecenia dla {nazwa_encji}."
 CHALLENGE_PREFIX = "potwierdz"
 
+MAX_REPLY_TEMPLATE_ENTITIES = 20
+ENTITY_REPLY_TEMPLATE_FIELD_BASES = (
+    "zmienna",
+    "stan",
+    "jednostka",
+    "nazwa_encji",
+    "entity_id",
+    "wynik",
+)
+_INDEXED_REPLY_TEMPLATE_FIELDS = {
+    f"{field}_{index}": index
+    for field in ENTITY_REPLY_TEMPLATE_FIELD_BASES
+    for index in range(1, MAX_REPLY_TEMPLATE_ENTITIES + 1)
+}
 REPLY_TEMPLATE_FIELDS = frozenset(
     {
         "data_czas",
@@ -122,6 +136,7 @@ REPLY_TEMPLATE_FIELDS = frozenset(
         "value",
         "wynik",
         "liczba_encji",
+        *_INDEXED_REPLY_TEMPLATE_FIELDS,
     }
 )
 
@@ -262,16 +277,24 @@ class PendingChallenge:
     saved_recipient_id: str
 
 
-def validate_reply_template(template: str) -> None:
+def validate_reply_template(template: str, *, entity_count: int | None = None) -> None:
     """Validate placeholders used by an SMS reply template."""
     try:
         parsed = list(Formatter().parse(template))
-        fields = {field_name for _, field_name, _, _ in parsed if field_name}
+        fields = [field_name for _, field_name, _, _ in parsed if field_name]
     except ValueError as err:
         raise ValueError("Invalid reply template syntax.") from err
-    unknown = fields - REPLY_TEMPLATE_FIELDS
+    unknown = set(fields) - REPLY_TEMPLATE_FIELDS
     if unknown:
         raise ValueError(f"Unsupported reply template field: {sorted(unknown)[0]}")
+    if entity_count is not None:
+        for field_name in fields:
+            index = _INDEXED_REPLY_TEMPLATE_FIELDS.get(field_name)
+            if index is not None and index > entity_count:
+                raise ValueError(
+                    f"Reply template field '{field_name}' refers to entity {index}, "
+                    f"but the rule has {entity_count} target entities."
+                )
     if any(field_name == "" for _, field_name, _, _ in parsed):
         raise ValueError("Positional reply template fields are not supported.")
     if any(format_spec or conversion for _, _, format_spec, conversion in parsed):
@@ -325,9 +348,9 @@ def _clean_rule(item: dict[str, Any]) -> SmsCommandRule | None:
             min(900, int(item.get(SMS_RULE_CHALLENGE_TTL_S, DEFAULT_SMS_RULE_CHALLENGE_TTL_S))),
         )
         service_data = _parse_service_data(item.get(SMS_RULE_SERVICE_DATA, {}))
-        validate_reply_template(success_reply)
+        validate_reply_template(success_reply, entity_count=len(targets))
         if failure_reply:
-            validate_reply_template(failure_reply)
+            validate_reply_template(failure_reply, entity_count=len(targets))
     except (TypeError, ValueError, json.JSONDecodeError):
         return None
 
@@ -337,6 +360,7 @@ def _clean_rule(item: dict[str, Any]) -> SmsCommandRule | None:
         or not command
         or command.casefold().count("{value}") > 1
         or not targets
+        or len(targets) > MAX_REPLY_TEMPLATE_ENTITIES
         or sender_mode not in SMS_RULE_SENDER_MODES
         or match_mode not in SMS_RULE_MATCH_MODES
         or action not in SMS_RULE_ACTIONS
@@ -526,71 +550,98 @@ def reply_template_values(
     command: str,
     value: str = "",
 ) -> dict[str, str]:
+    return reply_template_values_many(
+        [state],
+        data_czas=data_czas,
+        sender_name=sender_name,
+        command=command,
+        value=value,
+        entity_ids=(state.entity_id,),
+    )
+
+
+def _entity_reply_template_values(
+    state: State | None, entity_id: str = ""
+) -> dict[str, str]:
+    """Build one entity slot without losing its selected-list position."""
+    if state is None:
+        name = entity_id
+        return {
+            "zmienna": "nieznana",
+            "stan": "nieznany",
+            "jednostka": "",
+            "nazwa_encji": name,
+            "entity_id": entity_id,
+            "wynik": f"{name}: nieznany" if name else "brak stanu",
+        }
     unit = str(state.attributes.get("unit_of_measurement", "") or "")
-    entity_name = str(state.attributes.get(ATTR_FRIENDLY_NAME) or state.entity_id)
+    name = str(state.attributes.get(ATTR_FRIENDLY_NAME) or state.entity_id)
+    localized = _localized_state(state)
     return {
-        "data_czas": data_czas,
         "zmienna": state.state,
-        "stan": _localized_state(state),
+        "stan": localized,
         "jednostka": unit,
-        "nazwa_encji": entity_name,
+        "nazwa_encji": name,
         "entity_id": state.entity_id,
-        "nadawca": sender_name,
-        "komenda": command,
-        "value": value,
-        "wynik": f"{entity_name}: {_localized_state(state)} {unit}".strip(),
-        "liczba_encji": "1",
+        "wynik": f"{name}: {localized} {unit}".strip(),
     }
 
 
+def _entity_result_text(values: dict[str, str]) -> str:
+    return values["wynik"]
+
+
 def reply_template_values_many(
-    states: list[State],
+    states: list[State | None],
     *,
     data_czas: str,
     sender_name: str,
     command: str,
     value: str,
+    entity_ids: tuple[str, ...] | list[str] | None = None,
 ) -> dict[str, str]:
-    if not states:
-        return {
-            "data_czas": data_czas,
-            "zmienna": "nieznana",
-            "stan": "nieznany",
-            "jednostka": "",
-            "nazwa_encji": "",
-            "entity_id": "",
-            "nadawca": sender_name,
-            "komenda": command,
-            "value": value,
-            "wynik": "brak stanu",
-            "liczba_encji": "0",
-        }
-    if len(states) == 1:
-        return reply_template_values(
-            states[0],
-            data_czas=data_czas,
-            sender_name=sender_name,
-            command=command,
-            value=value,
-        )
-    names = [str(state.attributes.get(ATTR_FRIENDLY_NAME) or state.entity_id) for state in states]
-    results = [
-        f"{name}: {_localized_state(state)} {state.attributes.get('unit_of_measurement', '')}".strip()
-        for name, state in zip(names, states, strict=False)
+    selected_entity_ids = list(entity_ids or ())
+    slot_count = max(len(states), len(selected_entity_ids))
+    selected_entity_ids.extend([""] * (slot_count - len(selected_entity_ids)))
+    padded_states = [*states, *([None] * (slot_count - len(states)))]
+    slots = [
+        _entity_reply_template_values(state, selected_entity_ids[index])
+        for index, state in enumerate(padded_states)
     ]
-    return {
+
+    results = [_entity_result_text(slot) for slot in slots]
+    if len(slots) == 1:
+        legacy = slots[0]
+    elif slots:
+        # Keep the pre-0.5.1 meaning of the unnumbered variables for existing
+        # multi-entity rules. Numbered variables below are the unambiguous way
+        # to address one selected entity.
+        legacy = {
+            "zmienna": "; ".join(slot["zmienna"] for slot in slots),
+            "stan": "; ".join(results),
+            "jednostka": "",
+            "nazwa_encji": ", ".join(slot["nazwa_encji"] for slot in slots),
+            "entity_id": ", ".join(slot["entity_id"] for slot in slots),
+            "wynik": "; ".join(results),
+        }
+    else:
+        legacy = _entity_reply_template_values(None)
+    values = {
         "data_czas": data_czas,
-        "zmienna": "; ".join(state.state for state in states),
-        "stan": "; ".join(results),
-        "jednostka": "",
-        "nazwa_encji": ", ".join(names),
-        "entity_id": ", ".join(state.entity_id for state in states),
+        **legacy,
         "nadawca": sender_name,
         "komenda": command,
         "value": value,
-        "wynik": "; ".join(results),
-        "liczba_encji": str(len(states)),
+        "wynik": "; ".join(results) if results else "brak stanu",
+        "liczba_encji": str(slot_count),
     }
+    # All valid indexed placeholders are always present so an error reply can
+    # still render when one target vanished between validation and execution.
+    for index in range(1, MAX_REPLY_TEMPLATE_ENTITIES + 1):
+        slot = slots[index - 1] if index <= slot_count else None
+        for field in ENTITY_REPLY_TEMPLATE_FIELD_BASES:
+            values[f"{field}_{index}"] = slot[field] if slot is not None else ""
+    return values
 
 
 def render_reply_template(template: str, values: dict[str, str]) -> str:
@@ -1045,9 +1096,7 @@ class SmsCommandRuleEngine:
                     }:
                         await self._async_wait_for_expected_state(rule.action, entity_id, previous_state)
                 current_states = [
-                    state
-                    for entity_id in rule.targets
-                    if (state := self.hass.states.get(entity_id)) is not None
+                    self.hass.states.get(entity_id) for entity_id in rule.targets
                 ]
 
             self._last_rule_run[(canonical_authorization_number(sender), rule.id)] = monotonic()
@@ -1080,6 +1129,7 @@ class SmsCommandRuleEngine:
                         sender_name=sender_name,
                         command=message,
                         value=value,
+                        entity_ids=rule.targets,
                     )
                     template = rule.success_reply or (
                         DEFAULT_STATE_REPLY
@@ -1126,7 +1176,7 @@ class SmsCommandRuleEngine:
         message: str,
         sender_name: str,
         error: str,
-        states: list[State] | State | None = None,
+        states: list[State | None] | State | None = None,
         value: str = "",
     ) -> None:
         self._stats["failed"] += 1
@@ -1157,11 +1207,7 @@ class SmsCommandRuleEngine:
         elif isinstance(states, list):
             state_list = states
         else:
-            state_list = [
-                state
-                for entity_id in rule.targets
-                if (state := self.hass.states.get(entity_id)) is not None
-            ]
+            state_list = [self.hass.states.get(entity_id) for entity_id in rule.targets]
         try:
             values = reply_template_values_many(
                 state_list,
@@ -1169,6 +1215,7 @@ class SmsCommandRuleEngine:
                 sender_name=sender_name,
                 command=message,
                 value=value,
+                entity_ids=rule.targets,
             )
             async with asyncio.timeout(120):
                 await self.hub.async_send_sms(

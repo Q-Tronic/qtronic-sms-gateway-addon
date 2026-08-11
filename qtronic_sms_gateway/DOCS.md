@@ -263,13 +263,36 @@ Tryb odczytu stanu nie zmienia encji. Przykładowa reguła może reagować na SM
 Szablony odpowiedzi obsługują następujące zmienne:
 
 - `{data_czas}` - data i czas wysłania odpowiedzi w lokalnej strefie Home Assistanta
-- `{zmienna}` - surowa wartość encji, np. `21.5`
-- `{stan}` - czytelny stan, np. `otwarta`, `zamknięta`, `włączony`
-- `{jednostka}` - jednostka encji, np. `°C`
-- `{nazwa_encji}` - przyjazna nazwa encji
-- `{entity_id}` - identyfikator encji
+- `{zmienna}` - surowa wartość; przy wielu encjach lista ich surowych stanów
+- `{stan}` - czytelny stan; przy wielu encjach zbiorczy opis wszystkich stanów
+- `{jednostka}` - jednostka pojedynczej encji; przy wielu encjach pusta
+- `{nazwa_encji}` - przyjazna nazwa albo lista nazw wszystkich encji
+- `{entity_id}` - identyfikator albo lista identyfikatorów wszystkich encji
 - `{nadawca}` - nazwa zapisanego użytkownika albo zamaskowany numer
 - `{komenda}` - oryginalna odebrana wiadomość
+- `{value}` - parametr przechwycony z wielowyrazowej komendy
+- `{wynik}` - gotowy zbiorczy opis wszystkich wybranych encji
+- `{liczba_encji}` - liczba encji obsłużonych przez regułę
+
+Każda wybrana encja ma również osobny komplet zmiennych. Numer odpowiada jej
+kolejności w selektorze (pierwsza encja ma `_1`, druga `_2`, maksymalnie `_20`):
+
+- `{zmienna_1}` - surowa wartość encji numer 1
+- `{stan_1}` - czytelny stan encji numer 1
+- `{jednostka_1}` - jednostka encji numer 1
+- `{nazwa_encji_1}` - przyjazna nazwa encji numer 1
+- `{entity_id_1}` - identyfikator encji numer 1
+- `{wynik_1}` - gotowy pełny opis encji numer 1
+
+Formularz edycji pokazuje podpowiedź przy selektorze oraz aktualne mapowanie
+każdej wybranej encji, jej zmiennych i bieżących wartości. Szablon odwołujący
+się do dwóch encji może wyglądać tak:
+
+```text
+{data_czas}
+Temperatura w salonie: {stan_1} {jednostka_1}
+Brama: {stan_2}
+```
 
 Przykładowe odpowiedzi:
 

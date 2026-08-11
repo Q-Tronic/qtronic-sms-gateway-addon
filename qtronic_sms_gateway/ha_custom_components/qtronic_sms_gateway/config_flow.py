@@ -11,8 +11,8 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
-from homeassistant.const import ATTR_ENTITY_ID, CONF_HOST, CONF_PORT
-from homeassistant.core import callback
+from homeassistant.const import ATTR_ENTITY_ID, ATTR_FRIENDLY_NAME, CONF_HOST, CONF_PORT
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 
@@ -166,6 +166,8 @@ from .security import (
 )
 from .sms_commands import (
     DEFAULT_STATE_REPLY,
+    ENTITY_REPLY_TEMPLATE_FIELD_BASES,
+    MAX_REPLY_TEMPLATE_ENTITIES,
     REPLY_TEMPLATE_FIELDS,
     SmsCommandRule,
     action_supports_domain,
@@ -173,6 +175,7 @@ from .sms_commands import (
     load_sms_command_rules,
     match_rule_message,
     make_sms_rule_id,
+    reply_template_values,
     serialize_sms_command_rules,
     validate_reply_template,
     sms_rule_matches_sender,
@@ -729,6 +732,58 @@ def sms_rule_form_schema(
             ),
         }
     )
+
+
+def sms_rule_entity_mapping(
+    hass: HomeAssistant, defaults: dict[str, Any]
+) -> str:
+    """Describe the stable 1-based variables and current values for each target."""
+    entity_values = defaults.get(SMS_RULE_ENTITY_IDS)
+    if not entity_values:
+        entity_values = defaults.get(SMS_RULE_ENTITY_ID, [])
+    if isinstance(entity_values, str):
+        entity_values = [entity_values]
+    if not isinstance(entity_values, (list, tuple)):
+        return "—"
+
+    registry = er.async_get(hass)
+    lines: list[str] = []
+    for index, raw_entity_id in enumerate(entity_values, start=1):
+        if index > MAX_REPLY_TEMPLATE_ENTITIES:
+            break
+        raw_entity_id = str(raw_entity_id).strip()
+        if not raw_entity_id:
+            continue
+        entity_id = (
+            er.async_resolve_entity_id(registry, raw_entity_id) or raw_entity_id
+        )
+        state = hass.states.get(entity_id)
+        name = (
+            str(state.attributes.get(ATTR_FRIENDLY_NAME) or entity_id)
+            if state is not None
+            else entity_id
+        )
+        if state is not None:
+            samples = reply_template_values(
+                state,
+                data_czas="",
+                sender_name="",
+                command="",
+            )
+        else:
+            samples = {
+                "zmienna": "nieznana",
+                "stan": "nieznany",
+                "jednostka": "—",
+                "nazwa_encji": name,
+                "entity_id": entity_id,
+                "wynik": f"{name}: nieznany",
+            }
+        lines.append(f"{index}. {name} ({entity_id})")
+        for field in ENTITY_REPLY_TEMPLATE_FIELD_BASES:
+            current = str(samples.get(field, "") or "—")
+            lines.append(f"   {{{field}_{index}}} = {current}")
+    return "\n".join(lines) or "—"
 
 
 def sms_rule_select_schema(rules: tuple[SmsCommandRule, ...]) -> vol.Schema:
@@ -1753,8 +1808,12 @@ class QTronicSmsGatewayOptionsFlow(OptionsFlow):
         condition_before = str(user_input.get(SMS_RULE_CONDITION_BEFORE, "") or "").strip()
         condition_entity_value = str(user_input.get(SMS_RULE_CONDITION_ENTITY_ID, "") or "").strip()
         condition_entity_id = (
-            er.async_resolve_entity_id(registry, condition_entity_value)
-            or condition_entity_value
+            (
+                er.async_resolve_entity_id(registry, condition_entity_value)
+                or condition_entity_value
+            )
+            if condition_entity_value
+            else ""
         )
         condition_state = str(user_input.get(SMS_RULE_CONDITION_STATE, "") or "").strip()
         service_data_text = str(user_input.get(SMS_RULE_SERVICE_DATA, "") or "").strip()
@@ -1776,7 +1835,10 @@ class QTronicSmsGatewayOptionsFlow(OptionsFlow):
             raise ValueError("invalid_command")
         if command.casefold().count("{value}") > 1:
             raise ValueError("invalid_command")
-        if len(entity_ids) < 1 or len(entity_ids) > 20:
+        if (
+            len(entity_ids) < 1
+            or len(entity_ids) > MAX_REPLY_TEMPLATE_ENTITIES
+        ):
             raise ValueError("entity_not_found")
         if sender_mode == SMS_RULE_SENDER_SAVED:
             recipient = self._recipient_by_id(saved_recipient_id)
@@ -1837,9 +1899,9 @@ class QTronicSmsGatewayOptionsFlow(OptionsFlow):
             success_reply = DEFAULT_STATE_REPLY
         try:
             if success_reply:
-                validate_reply_template(success_reply)
+                validate_reply_template(success_reply, entity_count=len(entity_ids))
             if failure_reply:
-                validate_reply_template(failure_reply)
+                validate_reply_template(failure_reply, entity_count=len(entity_ids))
         except ValueError as err:
             raise ValueError("invalid_reply_template") from err
 
@@ -1925,7 +1987,12 @@ class QTronicSmsGatewayOptionsFlow(OptionsFlow):
             ),
             errors=errors,
             description_placeholders={
-                name: "{" + name + "}" for name in REPLY_TEMPLATE_FIELDS
+                **{
+                    name: "{" + name + "}" for name in REPLY_TEMPLATE_FIELDS
+                },
+                "mapowanie_encji": sms_rule_entity_mapping(
+                    self.hass, user_input or {}
+                ),
             },
         )
 
@@ -1977,12 +2044,21 @@ class QTronicSmsGatewayOptionsFlow(OptionsFlow):
         defaults = existing.as_dict()
         if user_input is not None:
             defaults.update(user_input)
+            # The selector posts the current targets as ``entity_id`` while a
+            # persisted rule also contains the compatibility ``entity_ids``
+            # key. After a validation error the submitted selection must win,
+            # otherwise the form would silently jump back to the old targets.
+            if SMS_RULE_ENTITY_ID in user_input:
+                defaults[SMS_RULE_ENTITY_IDS] = user_input[SMS_RULE_ENTITY_ID]
         return self.async_show_form(
             step_id="edit_sms_rule",
             data_schema=sms_rule_form_schema(defaults, self.available_recipients),
             errors=errors,
             description_placeholders={
-                name: "{" + name + "}" for name in REPLY_TEMPLATE_FIELDS
+                **{
+                    name: "{" + name + "}" for name in REPLY_TEMPLATE_FIELDS
+                },
+                "mapowanie_encji": sms_rule_entity_mapping(self.hass, defaults),
             },
         )
 

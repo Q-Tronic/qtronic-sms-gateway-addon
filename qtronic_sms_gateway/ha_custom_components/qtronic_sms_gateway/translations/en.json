@@ -152,7 +152,7 @@
       },
       "add_sms_rule": {
         "title": "Add SMS rule",
-        "description": "Polish characters, letter case, and repeated whitespace are ignored. `{value}` captures a parameter: `set lounge {value}` accepts `set lounge 22`. With a PIN, send `<command> <PIN>`, for example `set lounge 22 1234`. For a challenge, reply exactly `POTWIERDZ 123456` using the one-time code. PINs are never stored in plaintext; an empty PIN on edit preserves the current hash. A selected script is the safe container for a custom sequence.\n\nReply variables:\n`{data_czas}` – date and time when the reply is sent.\n`{zmienna}` – raw entity state.\n`{stan}` – localized entity state.\n`{jednostka}` – entity state unit.\n`{nazwa_encji}` – friendly entity name.\n`{entity_id}` – entity identifier.\n`{nadawca}` – saved sender name or masked phone number.\n`{komenda}` – received command text.\n`{value}` – parameter captured from the command.\n`{wynik}` – combined state description for all selected entities.\n`{liczba_encji}` – number of handled entities.",
+        "description": "Polish characters, letter case, and repeated whitespace are ignored. `{value}` captures a parameter: `set lounge {value}` accepts `set lounge 22`. With a PIN, send the command followed by a space and the PIN, for example `set lounge 22 1234`. For a challenge, reply exactly `POTWIERDZ 123456` using the one-time code. PINs are never stored in plaintext; an empty PIN on edit preserves the current hash. A selected script is the safe container for a custom sequence.\n\nReply variables:\n`{data_czas}` – date and time when the reply is sent.\n`{zmienna}` – raw state of one entity or joined raw states of multiple entities.\n`{stan}` – localized state of one entity or a combined description of multiple entities.\n`{jednostka}` – unit of one entity; empty when multiple entities are selected.\n`{nazwa_encji}` – friendly name of one entity or a list of names for multiple entities.\n`{entity_id}` – identifier of one entity or a list of identifiers for multiple entities.\n`{nadawca}` – saved sender name or masked phone number.\n`{komenda}` – received command text.\n`{value}` – parameter captured from the command.\n`{wynik}` – combined state description for all selected entities.\n`{liczba_encji}` – number of handled entities.\n\nVariables for a specific entity (in selection order, from 1 to 20):\n`{zmienna_1}` – raw state of entity 1; replace `1` with the entity number.\n`{stan_1}` – localized state of entity 1; replace `1` with the entity number.\n`{jednostka_1}` – state unit of entity 1; replace `1` with the entity number.\n`{nazwa_encji_1}` – friendly name of entity 1; replace `1` with the entity number.\n`{entity_id_1}` – identifier of entity 1; replace `1` with the entity number.\n`{wynik_1}` – full description of entity 1; replace `1` with the entity number.\n\nCurrent mapping of selected entities:\n{mapowanie_encji}",
         "data": {
           "name": "Rule name",
           "enabled": "Rule enabled",
@@ -177,6 +177,9 @@
           "reply_enabled": "Send a reply after success (state reports always reply)",
           "success_reply": "Success or state reply template",
           "failure_reply": "Optional failure reply template"
+        },
+        "data_description": {
+          "entity_id": "Selection order defines the variable number: the first entity uses suffix _1, the second _2, and so on. Save and reopen the rule to see the full mapping and current values in the form description."
         }
       },
       "edit_sms_rule_select": {
@@ -187,7 +190,7 @@
       },
       "edit_sms_rule": {
         "title": "Edit SMS rule",
-        "description": "Change the sender, command, targets, action, conditions and protection. PIN format: `<command> <PIN>`. Challenge format: `POTWIERDZ <code>`. Leaving PIN empty preserves the current hash. `{value}` captures a parameter.\n\nReply variables:\n`{data_czas}` – date and time when the reply is sent.\n`{zmienna}` – raw entity state.\n`{stan}` – localized entity state.\n`{jednostka}` – entity state unit.\n`{nazwa_encji}` – friendly entity name.\n`{entity_id}` – entity identifier.\n`{nadawca}` – saved sender name or masked phone number.\n`{komenda}` – received command text.\n`{value}` – parameter captured from the command.\n`{wynik}` – combined state description for all selected entities.\n`{liczba_encji}` – number of handled entities.",
+        "description": "Change the sender, command, targets, action, conditions and protection. PIN format: command, space, and PIN. Challenge format: `POTWIERDZ`, space, and code. Leaving PIN empty preserves the current hash. `{value}` captures a parameter.\n\nReply variables:\n`{data_czas}` – date and time when the reply is sent.\n`{zmienna}` – raw state of one entity or joined raw states of multiple entities.\n`{stan}` – localized state of one entity or a combined description of multiple entities.\n`{jednostka}` – unit of one entity; empty when multiple entities are selected.\n`{nazwa_encji}` – friendly name of one entity or a list of names for multiple entities.\n`{entity_id}` – identifier of one entity or a list of identifiers for multiple entities.\n`{nadawca}` – saved sender name or masked phone number.\n`{komenda}` – received command text.\n`{value}` – parameter captured from the command.\n`{wynik}` – combined state description for all selected entities.\n`{liczba_encji}` – number of handled entities.\n\nVariables for a specific entity (in selection order, from 1 to 20):\n`{zmienna_1}` – raw state of entity 1; replace `1` with the entity number.\n`{stan_1}` – localized state of entity 1; replace `1` with the entity number.\n`{jednostka_1}` – state unit of entity 1; replace `1` with the entity number.\n`{nazwa_encji_1}` – friendly name of entity 1; replace `1` with the entity number.\n`{entity_id_1}` – identifier of entity 1; replace `1` with the entity number.\n`{wynik_1}` – full description of entity 1; replace `1` with the entity number.\n\nCurrent mapping of selected entities:\n{mapowanie_encji}",
         "data": {
           "name": "Rule name",
           "enabled": "Rule enabled",
@@ -212,6 +215,9 @@
           "reply_enabled": "Send a reply after success (state reports always reply)",
           "success_reply": "Success or state reply template",
           "failure_reply": "Optional failure reply template"
+        },
+        "data_description": {
+          "entity_id": "Selection order defines the variable number: the first entity uses suffix _1, the second _2, and so on. The form description shows the full mapping and current value of every variable."
         }
       },
       "delete_sms_rules": {

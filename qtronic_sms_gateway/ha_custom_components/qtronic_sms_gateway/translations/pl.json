@@ -152,7 +152,7 @@
       },
       "add_sms_rule": {
         "title": "Dodaj regułę SMS",
-        "description": "Polskie znaki, wielkość liter i nadmiarowe spacje są ignorowane. `{value}` przechwytuje parametr, np. wzorzec `ustaw salon {value}` przyjmie SMS `ustaw salon 22`. Jeśli ustawiono PIN, format to `<polecenie> <PIN>`, np. `ustaw salon 22 1234`. Przy challenge odpowiedz dokładnie `POTWIERDZ 123456` kodem z wiadomości; kod jest jednorazowy. PIN nie jest zapisywany jawnie. Puste pole PIN podczas edycji zachowuje obecny hash. Skrypt jest bezpiecznym kontenerem dla własnej sekwencji.\n\nZmienne odpowiedzi:\n`{data_czas}` – data i czas z chwili wysyłania odpowiedzi.\n`{zmienna}` – surowy stan encji.\n`{stan}` – stan encji opisany po polsku.\n`{jednostka}` – jednostka stanu encji.\n`{nazwa_encji}` – przyjazna nazwa encji.\n`{entity_id}` – identyfikator encji.\n`{nadawca}` – nazwa zapisanego nadawcy albo zamaskowany numer.\n`{komenda}` – odebrana treść polecenia.\n`{value}` – parametr przechwycony z komendy.\n`{wynik}` – zbiorczy opis stanów wszystkich wybranych encji.\n`{liczba_encji}` – liczba obsłużonych encji.",
+        "description": "Polskie znaki, wielkość liter i nadmiarowe spacje są ignorowane. `{value}` przechwytuje parametr, np. wzorzec `ustaw salon {value}` przyjmie SMS `ustaw salon 22`. Jeśli ustawiono PIN, wyślij polecenie, spację i PIN, np. `ustaw salon 22 1234`. Przy challenge odpowiedz dokładnie `POTWIERDZ 123456` kodem z wiadomości; kod jest jednorazowy. PIN nie jest zapisywany jawnie. Puste pole PIN podczas edycji zachowuje obecny hash. Skrypt jest bezpiecznym kontenerem dla własnej sekwencji.\n\nZmienne odpowiedzi:\n`{data_czas}` – data i czas z chwili wysyłania odpowiedzi.\n`{zmienna}` – surowy stan jednej encji albo połączone surowe stany wielu encji.\n`{stan}` – opisany stan jednej encji albo zbiorczy opis wielu encji.\n`{jednostka}` – jednostka jednej encji; przy wielu encjach pozostaje pusta.\n`{nazwa_encji}` – przyjazna nazwa jednej encji albo lista nazw wielu encji.\n`{entity_id}` – identyfikator jednej encji albo lista identyfikatorów wielu encji.\n`{nadawca}` – nazwa zapisanego nadawcy albo zamaskowany numer.\n`{komenda}` – odebrana treść polecenia.\n`{value}` – parametr przechwycony z komendy.\n`{wynik}` – zbiorczy opis stanów wszystkich wybranych encji.\n`{liczba_encji}` – liczba obsłużonych encji.\n\nZmienne konkretnej encji (według kolejności na liście, od 1 do 20):\n`{zmienna_1}` – surowy stan encji numer 1; zastąp `1` numerem encji.\n`{stan_1}` – opisany stan encji numer 1; zastąp `1` numerem encji.\n`{jednostka_1}` – jednostka encji numer 1; zastąp `1` numerem encji.\n`{nazwa_encji_1}` – przyjazna nazwa encji numer 1; zastąp `1` numerem encji.\n`{entity_id_1}` – identyfikator encji numer 1; zastąp `1` numerem encji.\n`{wynik_1}` – pełny opis encji numer 1; zastąp `1` numerem encji.\n\nAktualne mapowanie wybranych encji:\n{mapowanie_encji}",
         "data": {
           "name": "Nazwa reguły",
           "enabled": "Reguła włączona",
@@ -177,6 +177,9 @@
           "reply_enabled": "Wyślij odpowiedź po sukcesie (odczyt stanu zawsze odpowiada)",
           "success_reply": "Szablon odpowiedzi po sukcesie lub odczycie",
           "failure_reply": "Opcjonalny szablon odpowiedzi po błędzie"
+        },
+        "data_description": {
+          "entity_id": "Kolejność wybranych encji określa numer zmiennej: pierwsza encja używa końcówki _1, druga _2 itd. Po zapisaniu i ponownym otwarciu reguły pełne mapowanie wraz z aktualnymi wartościami zobaczysz w opisie formularza."
         }
       },
       "edit_sms_rule_select": {
@@ -187,7 +190,7 @@
       },
       "edit_sms_rule": {
         "title": "Edytuj regułę SMS",
-        "description": "Zmień nadawcę, komendę, encje, operację, warunki i ochronę. PIN: `<polecenie> <PIN>`. Challenge: `POTWIERDZ <kod>`. Puste pole PIN zachowuje obecny hash. `{value}` przechwytuje parametr.\n\nZmienne odpowiedzi:\n`{data_czas}` – data i czas z chwili wysyłania odpowiedzi.\n`{zmienna}` – surowy stan encji.\n`{stan}` – stan encji opisany po polsku.\n`{jednostka}` – jednostka stanu encji.\n`{nazwa_encji}` – przyjazna nazwa encji.\n`{entity_id}` – identyfikator encji.\n`{nadawca}` – nazwa zapisanego nadawcy albo zamaskowany numer.\n`{komenda}` – odebrana treść polecenia.\n`{value}` – parametr przechwycony z komendy.\n`{wynik}` – zbiorczy opis stanów wszystkich wybranych encji.\n`{liczba_encji}` – liczba obsłużonych encji.",
+        "description": "Zmień nadawcę, komendę, encje, operację, warunki i ochronę. Format PIN-u: polecenie, spacja i PIN. Format challenge: `POTWIERDZ`, spacja i kod. Puste pole PIN zachowuje obecny hash. `{value}` przechwytuje parametr.\n\nZmienne odpowiedzi:\n`{data_czas}` – data i czas z chwili wysyłania odpowiedzi.\n`{zmienna}` – surowy stan jednej encji albo połączone surowe stany wielu encji.\n`{stan}` – opisany stan jednej encji albo zbiorczy opis wielu encji.\n`{jednostka}` – jednostka jednej encji; przy wielu encjach pozostaje pusta.\n`{nazwa_encji}` – przyjazna nazwa jednej encji albo lista nazw wielu encji.\n`{entity_id}` – identyfikator jednej encji albo lista identyfikatorów wielu encji.\n`{nadawca}` – nazwa zapisanego nadawcy albo zamaskowany numer.\n`{komenda}` – odebrana treść polecenia.\n`{value}` – parametr przechwycony z komendy.\n`{wynik}` – zbiorczy opis stanów wszystkich wybranych encji.\n`{liczba_encji}` – liczba obsłużonych encji.\n\nZmienne konkretnej encji (według kolejności na liście, od 1 do 20):\n`{zmienna_1}` – surowy stan encji numer 1; zastąp `1` numerem encji.\n`{stan_1}` – opisany stan encji numer 1; zastąp `1` numerem encji.\n`{jednostka_1}` – jednostka encji numer 1; zastąp `1` numerem encji.\n`{nazwa_encji_1}` – przyjazna nazwa encji numer 1; zastąp `1` numerem encji.\n`{entity_id_1}` – identyfikator encji numer 1; zastąp `1` numerem encji.\n`{wynik_1}` – pełny opis encji numer 1; zastąp `1` numerem encji.\n\nAktualne mapowanie wybranych encji:\n{mapowanie_encji}",
         "data": {
           "name": "Nazwa reguły",
           "enabled": "Reguła włączona",
@@ -212,6 +215,9 @@
           "reply_enabled": "Wyślij odpowiedź po sukcesie (odczyt stanu zawsze odpowiada)",
           "success_reply": "Szablon odpowiedzi po sukcesie lub odczycie",
           "failure_reply": "Opcjonalny szablon odpowiedzi po błędzie"
+        },
+        "data_description": {
+          "entity_id": "Kolejność wybranych encji określa numer zmiennej: pierwsza encja używa końcówki _1, druga _2 itd. Pełne mapowanie i bieżące wartości każdej zmiennej są pokazane w opisie formularza."
         }
       },
       "delete_sms_rules": {

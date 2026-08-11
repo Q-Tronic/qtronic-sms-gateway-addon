@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1
+
+- Add indexed reply variables for addressing each selected Home Assistant entity separately
+- Show a formatted entity-to-variable mapping, current values, and native field help directly in the SMS rule form while keeping `{wynik}` for a combined reply
+- Fix the `UNCLOSED_TAG` translation error in the add/edit SMS rule dialogs
+
 ## 0.5.0
 
 - Unify GSM, Unicode SMS, USSD, and modem recovery behind a single bounded SIM800 state machine

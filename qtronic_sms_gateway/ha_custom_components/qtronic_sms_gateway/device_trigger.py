@@ -6,7 +6,7 @@ from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.components.device_automation import TRIGGER_BASE_SCHEMA
+from homeassistant.components.device_automation import DEVICE_TRIGGER_BASE_SCHEMA
 from homeassistant.components.homeassistant.triggers import event as event_trigger
 from homeassistant.const import CONF_DEVICE_ID, CONF_DOMAIN, CONF_PLATFORM, CONF_TYPE
 from homeassistant.core import HomeAssistant
@@ -18,6 +18,7 @@ from .const import (
     ATTR_PHONE_NUMBER,
     DOMAIN,
     EVENT_ATTR_CALLER_NORMALIZED,
+    EVENT_ATTR_GATEWAY_HOST,
     EVENT_ATTR_MESSAGE_SEARCH,
     EVENT_ATTR_SAVED_RECIPIENT_ID,
     EVENT_ATTR_SENDER_NORMALIZED,
@@ -37,7 +38,7 @@ TRIGGER_TYPES = {
     TRIGGER_INCOMING_CALL,
 }
 
-TRIGGER_SCHEMA = TRIGGER_BASE_SCHEMA.extend(
+TRIGGER_SCHEMA = DEVICE_TRIGGER_BASE_SCHEMA.extend(
     {
         vol.Required(CONF_TYPE): vol.In(TRIGGER_TYPES),
         vol.Optional(CONF_SAVED_RECIPIENT_ID): str,
@@ -139,6 +140,11 @@ async def async_attach_trigger(
         else EVENT_INCOMING_CALL
     )
     event_data: dict[str, str] = {}
+    hub = _hub_for_device_id(hass, config[CONF_DEVICE_ID])
+    if hub is None:
+        raise vol.Invalid("Q-Tronic gateway device is not available")
+    if hub.gateway_host:
+        event_data[EVENT_ATTR_GATEWAY_HOST] = hub.gateway_host
 
     saved_recipient_id = config.get(CONF_SAVED_RECIPIENT_ID)
     if saved_recipient_id:

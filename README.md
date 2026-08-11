@@ -10,6 +10,9 @@ Repo zawiera:
 - REST API
 - MQTT publish/subscribe do sterowania i zdarzeń
 - odtwarzalne komponenty ESPHome dla stabilnej obsługi ESP8266 + SIM800C
+- trwałą kolejkę i historię z kontrolą prywatności
+- reguły SMS sterujące encjami Home Assistant, z PIN-em, challenge i warunkami
+- diagnostykę transportu, USSD oraz bezpieczne anulowanie połączeń i batchy
 
 Folder add-onu:
 

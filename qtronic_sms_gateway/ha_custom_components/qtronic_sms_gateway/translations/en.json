@@ -19,8 +19,8 @@
       }
     },
     "error": {
-      "cannot_connect": "Cannot connect to the ESPHome device.",
-      "invalid_auth": "The ESPHome API encryption key is invalid."
+      "cannot_connect": "Cannot connect to the Q-Tronic add-on backend.",
+      "invalid_auth": "The add-on API token is missing or invalid. Restart the add-on to recreate the token file."
     },
     "abort": {
       "already_configured": "This Q-Tronic SMS Gateway is already configured.",
@@ -33,7 +33,7 @@
         "title": "Q-Tronic SMS Gateway options",
         "description": "Choose what you want to configure. Saved recipients: {recipient_count}. SMS rules: {rule_count}.",
         "menu_options": {
-          "connection": "ESPHome connection",
+          "connection": "Add-on backend connection",
           "messaging": "SMS sending",
           "calling": "Calling",
           "recipients": "Saved recipients",
@@ -92,7 +92,9 @@
         "description": "Add a new saved SMS recipient.",
         "data": {
           "recipient_name": "Recipient name",
-          "recipient_phone": "Phone number"
+          "recipient_phone": "Phone number",
+          "pin_required": "Require a PIN for this contact's commands",
+          "recipient_pin": "Optional SMS PIN (4–12 digits)"
         }
       },
       "edit_recipient_select": {
@@ -107,7 +109,9 @@
         "description": "Update the selected recipient name or phone number.",
         "data": {
           "recipient_name": "Recipient name",
-          "recipient_phone": "Phone number"
+          "recipient_phone": "Phone number",
+          "pin_required": "Require a PIN for this contact's commands",
+          "recipient_pin": "New SMS PIN; leave empty to keep the current PIN"
         }
       },
       "delete_recipients": {
@@ -133,17 +137,22 @@
       },
       "sms_commands": {
         "title": "SMS commands and replies",
-        "description": "Configure entity control and state queries over SMS. The first matching rule is executed.\n\nCurrent rules:\n{rules}",
+        "description": "Configure secure entity control and state queries over SMS. Rules are evaluated by priority. Possible collisions detected: {collision_count}.\n\nCurrent rules:\n{rules}",
         "menu_options": {
           "add_sms_rule": "Add SMS rule",
           "edit_sms_rule_select": "Edit SMS rule",
           "delete_sms_rules": "Delete SMS rules",
+          "reorder_sms_rules": "Reorder SMS rules",
+          "test_sms_rule": "Rule tester (dry-run)",
+          "sms_security": "Security limits and lockout",
+          "export_sms_configuration": "Export rules and contacts",
+          "import_sms_configuration": "Import rules and contacts",
           "init": "Back to main menu"
         }
       },
       "add_sms_rule": {
         "title": "Add SMS rule",
-        "description": "Messages may contain multiple words. Polish characters, letter case, and repeated whitespace are ignored. Search for an entity by name or entity_id.\n\nReply template variables:\n\n- `{data_czas}` — date and time reply sending starts in the Home Assistant local time zone\n- `{zmienna}` — raw entity value, for example `23.4`, `on`, or `off`\n- `{stan}` — readable entity state, for example `otwarta`, `włączony`, or `23.4`\n- `{jednostka}` — measurement unit, for example `°C`; empty if the entity has none\n- `{nazwa_encji}` — friendly entity name, or its identifier\n- `{entity_id}` — full entity identifier, for example `sensor.temperatura_salon`\n- `{nadawca}` — saved user name, or a masked phone number\n- `{komenda}` — original received SMS command text\n\nExample:\n\n```text\n{data_czas}\nThe living room temperature is {stan} {jednostka}\n```",
+        "description": "Polish characters, letter case, and repeated whitespace are ignored. `{value}` captures a parameter: `set lounge {value}` accepts `set lounge 22`. With a PIN, send `<command> <PIN>`, for example `set lounge 22 1234`. For a challenge, reply exactly `POTWIERDZ 123456` using the one-time code. PINs are never stored in plaintext; an empty PIN on edit preserves the current hash. A selected script is the safe container for a custom sequence.\n\nReply variables:\n`{data_czas}` – date and time when the reply is sent.\n`{zmienna}` – raw entity state.\n`{stan}` – localized entity state.\n`{jednostka}` – entity state unit.\n`{nazwa_encji}` – friendly entity name.\n`{entity_id}` – entity identifier.\n`{nadawca}` – saved sender name or masked phone number.\n`{komenda}` – received command text.\n`{value}` – parameter captured from the command.\n`{wynik}` – combined state description for all selected entities.\n`{liczba_encji}` – number of handled entities.",
         "data": {
           "name": "Rule name",
           "enabled": "Rule enabled",
@@ -152,8 +161,19 @@
           "sender_phone": "Manual sender phone number",
           "command": "SMS command text",
           "match_mode": "Message matching mode",
-          "entity_id": "Home Assistant entity",
+          "entity_id": "Home Assistant entities (one or more)",
           "action": "Operation",
+          "priority": "Priority (higher is evaluated first)",
+          "cooldown_s": "Per-sender rule cooldown [s]",
+          "pin_required": "Require a PIN for this rule",
+          "pin": "Optional rule PIN; empty keeps current",
+          "challenge_required": "Require a second SMS with a one-time code",
+          "challenge_ttl_s": "Challenge code lifetime [s]",
+          "condition_after": "Allowed after HH:MM",
+          "condition_before": "Allowed before HH:MM",
+          "condition_entity_id": "Optional condition entity",
+          "condition_state": "Required condition entity state",
+          "service_data": "Optional safe service data (JSON; no entity_id)",
           "reply_enabled": "Send a reply after success (state reports always reply)",
           "success_reply": "Success or state reply template",
           "failure_reply": "Optional failure reply template"
@@ -167,7 +187,7 @@
       },
       "edit_sms_rule": {
         "title": "Edit SMS rule",
-        "description": "Change the sender, multi-word command, entity, operation, or reply templates.\n\nReply template variables:\n\n- `{data_czas}` — date and time reply sending starts in the Home Assistant local time zone\n- `{zmienna}` — raw entity value, for example `23.4`, `on`, or `off`\n- `{stan}` — readable entity state, for example `otwarta`, `włączony`, or `23.4`\n- `{jednostka}` — measurement unit, for example `°C`; empty if the entity has none\n- `{nazwa_encji}` — friendly entity name, or its identifier\n- `{entity_id}` — full entity identifier, for example `sensor.temperatura_salon`\n- `{nadawca}` — saved user name, or a masked phone number\n- `{komenda}` — original received SMS command text\n\nExample:\n\n```text\n{data_czas}\nThe living room temperature is {stan} {jednostka}\n```",
+        "description": "Change the sender, command, targets, action, conditions and protection. PIN format: `<command> <PIN>`. Challenge format: `POTWIERDZ <code>`. Leaving PIN empty preserves the current hash. `{value}` captures a parameter.\n\nReply variables:\n`{data_czas}` – date and time when the reply is sent.\n`{zmienna}` – raw entity state.\n`{stan}` – localized entity state.\n`{jednostka}` – entity state unit.\n`{nazwa_encji}` – friendly entity name.\n`{entity_id}` – entity identifier.\n`{nadawca}` – saved sender name or masked phone number.\n`{komenda}` – received command text.\n`{value}` – parameter captured from the command.\n`{wynik}` – combined state description for all selected entities.\n`{liczba_encji}` – number of handled entities.",
         "data": {
           "name": "Rule name",
           "enabled": "Rule enabled",
@@ -176,8 +196,19 @@
           "sender_phone": "Manual sender phone number",
           "command": "SMS command text",
           "match_mode": "Message matching mode",
-          "entity_id": "Home Assistant entity",
+          "entity_id": "Home Assistant entities (one or more)",
           "action": "Operation",
+          "priority": "Priority (higher is evaluated first)",
+          "cooldown_s": "Per-sender rule cooldown [s]",
+          "pin_required": "Require a PIN for this rule",
+          "pin": "New rule PIN; empty keeps current",
+          "challenge_required": "Require a second SMS with a one-time code",
+          "challenge_ttl_s": "Challenge code lifetime [s]",
+          "condition_after": "Allowed after HH:MM",
+          "condition_before": "Allowed before HH:MM",
+          "condition_entity_id": "Optional condition entity",
+          "condition_state": "Required condition entity state",
+          "service_data": "Optional safe service data (JSON; no entity_id)",
           "reply_enabled": "Send a reply after success (state reports always reply)",
           "success_reply": "Success or state reply template",
           "failure_reply": "Optional failure reply template"
@@ -189,6 +220,37 @@
         "data": {
           "sms_rule_id": "SMS rules"
         }
+      },
+      "reorder_sms_rules": {
+        "title": "Reorder SMS rules",
+        "description": "Move a rule. Explicit priorities are saved so ordering stays deterministic.",
+        "data": {"sms_rule_id": "Rule", "sms_rule_direction": "Direction"}
+      },
+      "test_sms_rule": {
+        "title": "SMS rule tester (dry-run)",
+        "description": "{result}\n\nThe tester only evaluates matching. It never calls a service or changes an entity.",
+        "data": {"sms_rule_test_sender": "Sender number", "sms_rule_test_message": "Test SMS text"}
+      },
+      "sms_security": {
+        "title": "SMS command security",
+        "description": "Limits apply to messages matching an authorized sender/rule. Repeated invalid PINs temporarily lock the sender.",
+        "data": {
+          "sms_security_global_limit": "Global attempts per window",
+          "sms_security_sender_limit": "Attempts per sender per window",
+          "sms_security_window_s": "Window length [s]",
+          "sms_security_pin_failure_limit": "Invalid PINs before lockout",
+          "sms_security_lockout_s": "Lockout duration [s]"
+        }
+      },
+      "export_sms_configuration": {
+        "title": "Export rules and contacts",
+        "description": "Copy the JSON. PINs are exported only as salted PBKDF2 hashes; still treat this file as sensitive.",
+        "data": {"import_export_payload": "Export JSON"}
+      },
+      "import_sms_configuration": {
+        "title": "Import rules and contacts",
+        "description": "Paste JSON produced by export. Valid data replaces local contacts, rules and limits.",
+        "data": {"import_export_payload": "Import JSON"}
       },
       "entity_mapping": {
         "title": "Entity mapping",
@@ -206,16 +268,22 @@
       }
     },
     "error": {
-      "cannot_connect": "Cannot connect to the ESPHome device.",
-      "invalid_auth": "The ESPHome API encryption key is invalid.",
+      "cannot_connect": "Cannot connect to the Q-Tronic add-on backend.",
+      "invalid_auth": "The add-on API token is missing or invalid. Restart the add-on to recreate the token file.",
       "invalid_recipient": "Check the recipient name and phone number.",
-      "invalid_sender": "Select an existing saved user or enter a valid sender phone number.",
+      "invalid_sender": "Select a contact with a full E.164 number or enter +country_code..., for example +48500100200.",
       "invalid_rule_name": "Enter an SMS rule name.",
       "invalid_command": "Enter a valid non-empty command and matching mode.",
       "entity_not_found": "The selected entity does not exist or is not currently available in Home Assistant.",
       "unsupported_entity": "The selected entity does not support this operation. Any entity can be selected for state reporting.",
       "duplicate_sms_rule": "A rule with the same sender, command, and matching mode already exists.",
       "invalid_reply_template": "The reply template contains invalid syntax or an unsupported variable.",
+      "invalid_pin": "A PIN must contain between 4 and 12 digits.",
+      "invalid_service_data": "Service data must be a JSON object without entity_id.",
+      "missing_value_placeholder": "The set-value action requires `{value}` in the command text.",
+      "invalid_time_condition": "A time condition must use HH:MM format.",
+      "invalid_state_condition": "Condition entity and required state must be provided together.",
+      "invalid_import_payload": "The import JSON is invalid or contains unsupported records.",
       "forward_no_recipients": "Select at least one forwarding recipient.",
       "invalid_forward_recipient": "A selected forwarding recipient or excluded sender no longer exists in the saved contacts.",
       "invalid_forward_phone": "Check the additional excluded phone numbers.",
@@ -274,6 +342,29 @@
           "description": "How long the modem should keep dialing before it disconnects the call."
         }
       }
+    },
+    "hangup": {
+      "name": "Hang up",
+      "description": "Immediately request call disconnect on the selected gateway.",
+      "fields": {
+        "config_entry_id": {"name": "Config entry ID", "description": "Required when multiple gateways exist."}
+      }
+    },
+    "cancel_batch": {
+      "name": "Cancel batch",
+      "description": "Cancel an active or queued batch when supported by the backend.",
+      "fields": {
+        "config_entry_id": {"name": "Config entry ID", "description": "Required when multiple gateways exist."},
+        "batch_id": {"name": "Batch ID", "description": "Optional; empty selects the active batch."}
+      }
+    },
+    "send_ussd": {
+      "name": "Send USSD",
+      "description": "Send a USSD code when the backend and firmware advertise support.",
+      "fields": {
+        "config_entry_id": {"name": "Config entry ID", "description": "Required when multiple gateways exist."},
+        "code": {"name": "USSD code", "description": "For example *100#."}
+      }
     }
   },
   "device_automation": {
@@ -286,6 +377,14 @@
     "restart_required": {
       "title": "Restart Home Assistant to finish updating Q-Tronic SMS Gateway",
       "description": "The Q-Tronic SMS Gateway add-on synchronized a new custom integration version (`{synced_version}`) into `/config/custom_components`, but Home Assistant is still running version `{current_version}`. Restart Home Assistant Core to load the updated integration and restore actions like `qtronic_sms_gateway.send_sms` / `qtronic_sms_gateway.call_to`.\n\nPrevious synced version: `{previous_version}`."
+    },
+    "api_token_missing": {
+      "title": "Q-Tronic SMS Gateway API token is missing",
+      "description": "The integration could not find `/config/.qtronic_sms_gateway/api_token`. Start or update the add-on so it creates the token, then reload the integration."
+    },
+    "send_sms_capability_missing": {
+      "title": "The gateway cannot send SMS",
+      "description": "The backend does not advertise either standard or Unicode SMS sending. Check the ESPHome firmware and add-on action mapping."
     }
   }
 }

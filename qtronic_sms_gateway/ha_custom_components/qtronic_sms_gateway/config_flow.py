@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import replace
 import json
 from pathlib import Path
 from typing import Any
@@ -10,7 +11,7 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
-from homeassistant.const import CONF_HOST, CONF_PORT
+from homeassistant.const import ATTR_ENTITY_ID, CONF_HOST, CONF_PORT
 from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
@@ -47,6 +48,11 @@ from .const import (
     CONF_SEND_SMS_ACTION,
     CONF_SMS_ENCODING,
     CONF_SMS_COMMAND_RULES,
+    CONF_SMS_SECURITY_GLOBAL_LIMIT,
+    CONF_SMS_SECURITY_LOCKOUT_S,
+    CONF_SMS_SECURITY_PIN_FAILURE_LIMIT,
+    CONF_SMS_SECURITY_SENDER_LIMIT,
+    CONF_SMS_SECURITY_WINDOW_S,
     CONF_SMS_MESSAGE_OBJECT_ID,
     CONF_SMS_SENDER_OBJECT_ID,
     CONF_UNICODE_SEND_SMS_ACTION,
@@ -63,6 +69,13 @@ from .const import (
     DEFAULT_RING_TIME_S,
     DEFAULT_SEND_DELAY_MS,
     DEFAULT_SMS_ENCODING,
+    DEFAULT_SMS_RULE_CHALLENGE_TTL_S,
+    DEFAULT_SMS_RULE_COOLDOWN_S,
+    DEFAULT_SMS_SECURITY_GLOBAL_LIMIT,
+    DEFAULT_SMS_SECURITY_LOCKOUT_S,
+    DEFAULT_SMS_SECURITY_PIN_FAILURE_LIMIT,
+    DEFAULT_SMS_SECURITY_SENDER_LIMIT,
+    DEFAULT_SMS_SECURITY_WINDOW_S,
     DEFAULT_SEND_SMS_ACTION,
     DEFAULT_UNICODE_SEND_SMS_ACTION,
     DOMAIN,
@@ -70,12 +83,29 @@ from .const import (
     SMS_ENCODINGS,
     SMS_RULE_ACTION,
     SMS_RULE_ACTION_REPORT_STATE,
+    SMS_RULE_ACTION_ACTIVATE_SCENE,
+    SMS_RULE_ACTION_ALARM_ARM_AWAY,
+    SMS_RULE_ACTION_ALARM_ARM_HOME,
+    SMS_RULE_ACTION_ALARM_ARM_NIGHT,
+    SMS_RULE_ACTION_ALARM_DISARM,
+    SMS_RULE_ACTION_ALARM_TRIGGER,
+    SMS_RULE_ACTION_CLOSE_COVER,
+    SMS_RULE_ACTION_LOCK,
+    SMS_RULE_ACTION_OPEN_COVER,
+    SMS_RULE_ACTION_RUN_SCRIPT,
+    SMS_RULE_ACTION_SET_VALUE,
+    SMS_RULE_ACTION_STOP_COVER,
     SMS_RULE_ACTION_TOGGLE,
     SMS_RULE_ACTION_TURN_OFF,
     SMS_RULE_ACTION_TURN_ON,
+    SMS_RULE_ACTION_UNLOCK,
+    SMS_RULE_ACTIONS,
+    SMS_RULE_CHALLENGE_REQUIRED,
+    SMS_RULE_CHALLENGE_TTL_S,
     SMS_RULE_COMMAND,
     SMS_RULE_ENABLED,
     SMS_RULE_ENTITY_ID,
+    SMS_RULE_ENTITY_IDS,
     SMS_RULE_FAILURE_REPLY,
     SMS_RULE_MATCH_CONTAINS,
     SMS_RULE_MATCH_EXACT,
@@ -83,6 +113,15 @@ from .const import (
     SMS_RULE_MATCH_MODES,
     SMS_RULE_MATCH_STARTS_WITH,
     SMS_RULE_NAME,
+    SMS_RULE_PIN,
+    SMS_RULE_PIN_REQUIRED,
+    SMS_RULE_PRIORITY,
+    SMS_RULE_COOLDOWN_S,
+    SMS_RULE_CONDITION_AFTER,
+    SMS_RULE_CONDITION_BEFORE,
+    SMS_RULE_CONDITION_ENTITY_ID,
+    SMS_RULE_CONDITION_STATE,
+    SMS_RULE_SERVICE_DATA,
     SMS_RULE_REPLY_ENABLED,
     SMS_RULE_SAVED_RECIPIENT_ID,
     SMS_RULE_SENDER_MANUAL,
@@ -90,6 +129,7 @@ from .const import (
     SMS_RULE_SENDER_PHONE,
     SMS_RULE_SENDER_SAVED,
     SMS_RULE_SUCCESS_REPLY,
+    RECIPIENT_PIN_REQUIRED,
 )
 from .hub import (
     GatewayAuthenticationError,
@@ -108,29 +148,45 @@ from .recipients import (
     SavedRecipient,
     load_saved_recipients,
     make_recipient_id,
+    merge_saved_recipients,
     normalize_phone_number,
     normalize_recipient_name,
     recipient_select_options,
     recipient_summary_lines,
     serialize_saved_recipients,
-    phone_numbers_match,
 )
 from .sms import normalize_inbound_text
+from .security import (
+    authorization_numbers_match,
+    canonical_authorization_number,
+    hash_pin,
+    split_trailing_pin,
+    validate_pin,
+    verify_pin,
+)
 from .sms_commands import (
-    CONTROL_ENTITY_DOMAINS,
     DEFAULT_STATE_REPLY,
     REPLY_TEMPLATE_FIELDS,
     SmsCommandRule,
+    action_supports_domain,
+    find_rule_collisions,
     load_sms_command_rules,
+    match_rule_message,
     make_sms_rule_id,
     serialize_sms_command_rules,
     validate_reply_template,
+    sms_rule_matches_sender,
 )
 
 CONF_RECIPIENT_NAME = "recipient_name"
 CONF_RECIPIENT_PHONE = "recipient_phone"
 CONF_RECIPIENT_ID = "recipient_id"
+CONF_RECIPIENT_PIN = "recipient_pin"
 CONF_SMS_RULE_ID = "sms_rule_id"
+CONF_SMS_RULE_DIRECTION = "sms_rule_direction"
+CONF_SMS_RULE_TEST_SENDER = "sms_rule_test_sender"
+CONF_SMS_RULE_TEST_MESSAGE = "sms_rule_test_message"
+CONF_IMPORT_EXPORT_PAYLOAD = "import_export_payload"
 
 
 def user_schema(
@@ -435,6 +491,16 @@ def recipient_form_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
                 CONF_RECIPIENT_PHONE,
                 default=defaults.get(CONF_RECIPIENT_PHONE, ""),
             ): selector.TextSelector(),
+            vol.Required(
+                RECIPIENT_PIN_REQUIRED,
+                default=defaults.get(RECIPIENT_PIN_REQUIRED, False),
+            ): selector.BooleanSelector(),
+            vol.Optional(
+                CONF_RECIPIENT_PIN,
+                default=defaults.get(CONF_RECIPIENT_PIN, ""),
+            ): selector.TextSelector(
+                selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+            ),
         }
     )
 
@@ -473,6 +539,13 @@ def sms_rule_form_schema(
     saved_recipients: tuple[SavedRecipient, ...],
 ) -> vol.Schema:
     """Build the add/edit form for one inbound SMS command rule."""
+    entity_defaults = defaults.get(SMS_RULE_ENTITY_IDS)
+    if not entity_defaults:
+        entity_defaults = [defaults.get(SMS_RULE_ENTITY_ID, "")]
+    entity_defaults = [str(item) for item in entity_defaults if item]
+    service_data = defaults.get(SMS_RULE_SERVICE_DATA, {})
+    if isinstance(service_data, dict):
+        service_data = json.dumps(service_data, ensure_ascii=False, indent=2)
     return vol.Schema(
         {
             vol.Required(
@@ -546,9 +619,9 @@ def sms_rule_form_schema(
             ),
             vol.Required(
                 SMS_RULE_ENTITY_ID,
-                default=defaults.get(SMS_RULE_ENTITY_ID, ""),
+                default=entity_defaults,
             ): selector.EntitySelector(
-                selector.EntitySelectorConfig(multiple=False)
+                selector.EntitySelectorConfig(multiple=True)
             ),
             vol.Required(
                 SMS_RULE_ACTION,
@@ -572,10 +645,72 @@ def sms_rule_form_schema(
                             value=SMS_RULE_ACTION_REPORT_STATE,
                             label="Odeślij aktualny stan",
                         ),
+                        selector.SelectOptionDict(value=SMS_RULE_ACTION_OPEN_COVER, label="Otwórz cover/bramę"),
+                        selector.SelectOptionDict(value=SMS_RULE_ACTION_CLOSE_COVER, label="Zamknij cover/bramę"),
+                        selector.SelectOptionDict(value=SMS_RULE_ACTION_STOP_COVER, label="Zatrzymaj cover/bramę"),
+                        selector.SelectOptionDict(value=SMS_RULE_ACTION_LOCK, label="Zablokuj zamek"),
+                        selector.SelectOptionDict(value=SMS_RULE_ACTION_UNLOCK, label="Odblokuj zamek"),
+                        selector.SelectOptionDict(value=SMS_RULE_ACTION_ALARM_ARM_HOME, label="Uzbrój alarm: dom"),
+                        selector.SelectOptionDict(value=SMS_RULE_ACTION_ALARM_ARM_AWAY, label="Uzbrój alarm: poza domem"),
+                        selector.SelectOptionDict(value=SMS_RULE_ACTION_ALARM_ARM_NIGHT, label="Uzbrój alarm: noc"),
+                        selector.SelectOptionDict(value=SMS_RULE_ACTION_ALARM_DISARM, label="Rozbrój alarm"),
+                        selector.SelectOptionDict(value=SMS_RULE_ACTION_ALARM_TRIGGER, label="Wyzwól alarm"),
+                        selector.SelectOptionDict(value=SMS_RULE_ACTION_RUN_SCRIPT, label="Uruchom wybrane skrypty"),
+                        selector.SelectOptionDict(value=SMS_RULE_ACTION_ACTIVATE_SCENE, label="Aktywuj sceny"),
+                        selector.SelectOptionDict(value=SMS_RULE_ACTION_SET_VALUE, label="Ustaw wartość z {value}"),
                     ],
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
             ),
+            vol.Optional(
+                SMS_RULE_PRIORITY,
+                default=defaults.get(SMS_RULE_PRIORITY, 0),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=-1000, max=1000, step=1, mode=selector.NumberSelectorMode.BOX)
+            ),
+            vol.Optional(
+                SMS_RULE_COOLDOWN_S,
+                default=defaults.get(SMS_RULE_COOLDOWN_S, DEFAULT_SMS_RULE_COOLDOWN_S),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=0, max=86400, step=1, mode=selector.NumberSelectorMode.BOX)
+            ),
+            vol.Required(
+                SMS_RULE_PIN_REQUIRED,
+                default=defaults.get(SMS_RULE_PIN_REQUIRED, False),
+            ): selector.BooleanSelector(),
+            vol.Optional(SMS_RULE_PIN, default=""): selector.TextSelector(
+                selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+            ),
+            vol.Required(
+                SMS_RULE_CHALLENGE_REQUIRED,
+                default=defaults.get(SMS_RULE_CHALLENGE_REQUIRED, False),
+            ): selector.BooleanSelector(),
+            vol.Optional(
+                SMS_RULE_CHALLENGE_TTL_S,
+                default=defaults.get(SMS_RULE_CHALLENGE_TTL_S, DEFAULT_SMS_RULE_CHALLENGE_TTL_S),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(min=30, max=900, step=1, mode=selector.NumberSelectorMode.BOX)
+            ),
+            vol.Optional(
+                SMS_RULE_CONDITION_AFTER,
+                default=defaults.get(SMS_RULE_CONDITION_AFTER, ""),
+            ): selector.TextSelector(),
+            vol.Optional(
+                SMS_RULE_CONDITION_BEFORE,
+                default=defaults.get(SMS_RULE_CONDITION_BEFORE, ""),
+            ): selector.TextSelector(),
+            vol.Optional(
+                SMS_RULE_CONDITION_ENTITY_ID,
+                description={"suggested_value": defaults.get(SMS_RULE_CONDITION_ENTITY_ID, "")},
+            ): selector.EntitySelector(selector.EntitySelectorConfig(multiple=False)),
+            vol.Optional(
+                SMS_RULE_CONDITION_STATE,
+                default=defaults.get(SMS_RULE_CONDITION_STATE, ""),
+            ): selector.TextSelector(),
+            vol.Optional(
+                SMS_RULE_SERVICE_DATA,
+                default=service_data,
+            ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
             vol.Required(
                 SMS_RULE_REPLY_ENABLED,
                 default=defaults.get(SMS_RULE_REPLY_ENABLED, True),
@@ -656,6 +791,78 @@ def sms_rule_summary_lines(
     return "\n".join(lines)
 
 
+def sms_security_schema(defaults: dict[str, Any]) -> vol.Schema:
+    """Build global inbound-command abuse protection options."""
+    fields = (
+        (CONF_SMS_SECURITY_GLOBAL_LIMIT, DEFAULT_SMS_SECURITY_GLOBAL_LIMIT, 1, 1000),
+        (CONF_SMS_SECURITY_SENDER_LIMIT, DEFAULT_SMS_SECURITY_SENDER_LIMIT, 1, 1000),
+        (CONF_SMS_SECURITY_WINDOW_S, DEFAULT_SMS_SECURITY_WINDOW_S, 10, 3600),
+        (CONF_SMS_SECURITY_PIN_FAILURE_LIMIT, DEFAULT_SMS_SECURITY_PIN_FAILURE_LIMIT, 1, 100),
+        (CONF_SMS_SECURITY_LOCKOUT_S, DEFAULT_SMS_SECURITY_LOCKOUT_S, 10, 86400),
+    )
+    return vol.Schema(
+        {
+            vol.Required(key, default=defaults.get(key, default)): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=minimum,
+                    max=maximum,
+                    step=1,
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            )
+            for key, default, minimum, maximum in fields
+        }
+    )
+
+
+def sms_rule_test_schema(defaults: dict[str, Any]) -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_SMS_RULE_TEST_SENDER,
+                default=defaults.get(CONF_SMS_RULE_TEST_SENDER, ""),
+            ): selector.TextSelector(),
+            vol.Required(
+                CONF_SMS_RULE_TEST_MESSAGE,
+                default=defaults.get(CONF_SMS_RULE_TEST_MESSAGE, ""),
+            ): selector.TextSelector(),
+        }
+    )
+
+
+def sms_rule_reorder_schema(rules: tuple[SmsCommandRule, ...]) -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(CONF_SMS_RULE_ID): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=sms_rule_select_options(rules),
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Required(CONF_SMS_RULE_DIRECTION, default="up"): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        selector.SelectOptionDict(value="up", label="Wyżej"),
+                        selector.SelectOptionDict(value="down", label="Niżej"),
+                    ],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+        }
+    )
+
+
+def import_export_schema(payload: str = "") -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_IMPORT_EXPORT_PAYLOAD,
+                default=payload,
+            ): selector.TextSelector(selector.TextSelectorConfig(multiline=True))
+        }
+    )
+
+
 def clean_options(data: dict[str, Any]) -> dict[str, Any]:
     """Drop empty option values so config defaults can win."""
     cleaned: dict[str, Any] = {}
@@ -702,7 +909,7 @@ class QTronicSmsGatewayConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             try:
-                device = await validate_gateway_connection(user_input)
+                device = await validate_gateway_connection(user_input, self.hass)
             except GatewayAuthenticationError:
                 errors["base"] = "invalid_auth"
             except GatewayConnectionError:
@@ -757,7 +964,7 @@ class QTronicSmsGatewayConfigFlow(ConfigFlow, domain=DOMAIN):
                 CONF_PORT: int(user_input[CONF_PORT]),
             }
             try:
-                device = await validate_gateway_connection(candidate)
+                device = await validate_gateway_connection(candidate, self.hass)
             except GatewayAuthenticationError:
                 errors["base"] = "invalid_auth"
             except GatewayConnectionError:
@@ -811,7 +1018,7 @@ class QTronicSmsGatewayOptionsFlow(OptionsFlow):
         """Return recipients currently exposed by the running add-on or options."""
         hub = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
         if hub is not None and hub.saved_recipients:
-            return hub.saved_recipients
+            return merge_saved_recipients(self.saved_recipients, hub.saved_recipients)
         return self.saved_recipients
 
     @property
@@ -867,7 +1074,7 @@ class QTronicSmsGatewayOptionsFlow(OptionsFlow):
                 CONF_PORT: int(user_input[CONF_PORT]),
             }
             try:
-                device = await validate_gateway_connection(candidate)
+                device = await validate_gateway_connection(candidate, self.hass)
             except GatewayAuthenticationError:
                 errors["base"] = "invalid_auth"
             except GatewayConnectionError:
@@ -937,9 +1144,9 @@ class QTronicSmsGatewayOptionsFlow(OptionsFlow):
         }
         return self.async_show_form(
             step_id="messaging",
-            data_schema=messaging_schema(defaults, self.saved_recipients),
+            data_schema=messaging_schema(defaults, self.available_recipients),
             description_placeholders={
-                "recipients": recipient_summary_lines(self.saved_recipients),
+                "recipients": recipient_summary_lines(self.available_recipients),
             },
         )
 
@@ -1156,13 +1363,26 @@ class QTronicSmsGatewayOptionsFlow(OptionsFlow):
             try:
                 name = normalize_recipient_name(user_input[CONF_RECIPIENT_NAME])
                 phone = normalize_phone_number(user_input[CONF_RECIPIENT_PHONE])
+                pin_required = bool(user_input.get(RECIPIENT_PIN_REQUIRED, False))
+                raw_pin = validate_pin(str(user_input.get(CONF_RECIPIENT_PIN, "")))
+                if pin_required and not raw_pin:
+                    raise ValueError("PIN is required")
+                pin_hash = hash_pin(raw_pin) if pin_required else ""
             except ValueError:
                 errors["base"] = "invalid_recipient"
             else:
                 existing_ids = {recipient.id for recipient in self.saved_recipients}
                 recipient_id = make_recipient_id(name, existing_ids)
                 recipients = list(self.saved_recipients)
-                recipients.append(SavedRecipient(id=recipient_id, name=name, phone=phone))
+                recipients.append(
+                    SavedRecipient(
+                        id=recipient_id,
+                        name=name,
+                        phone=phone,
+                        pin_hash=pin_hash,
+                        pin_required=pin_required,
+                    )
+                )
                 self.working_options[CONF_SAVED_RECIPIENTS] = serialize_saved_recipients(
                     recipients
                 )
@@ -1205,11 +1425,28 @@ class QTronicSmsGatewayOptionsFlow(OptionsFlow):
             try:
                 name = normalize_recipient_name(user_input[CONF_RECIPIENT_NAME])
                 phone = normalize_phone_number(user_input[CONF_RECIPIENT_PHONE])
+                pin_required = bool(user_input.get(RECIPIENT_PIN_REQUIRED, False))
+                raw_pin = validate_pin(str(user_input.get(CONF_RECIPIENT_PIN, "")))
+                pin_hash = (
+                    hash_pin(raw_pin)
+                    if raw_pin
+                    else recipient.pin_hash
+                    if pin_required
+                    else ""
+                )
+                if pin_required and not pin_hash:
+                    raise ValueError("PIN is required")
             except ValueError:
                 errors["base"] = "invalid_recipient"
             else:
                 updated = [
-                    SavedRecipient(id=item.id, name=name, phone=phone)
+                    SavedRecipient(
+                        id=item.id,
+                        name=name,
+                        phone=phone,
+                        pin_hash=pin_hash,
+                        pin_required=pin_required,
+                    )
                     if item.id == recipient.id
                     else item
                     for item in self.saved_recipients
@@ -1226,6 +1463,7 @@ class QTronicSmsGatewayOptionsFlow(OptionsFlow):
                 {
                     CONF_RECIPIENT_NAME: recipient.name,
                     CONF_RECIPIENT_PHONE: recipient.phone,
+                    RECIPIENT_PIN_REQUIRED: recipient.pin_required,
                 }
             ),
             errors=errors,
@@ -1273,11 +1511,190 @@ class QTronicSmsGatewayOptionsFlow(OptionsFlow):
                 "add_sms_rule",
                 "edit_sms_rule_select",
                 "delete_sms_rules",
+                "reorder_sms_rules",
+                "test_sms_rule",
+                "sms_security",
+                "export_sms_configuration",
+                "import_sms_configuration",
                 "init",
             ],
             description_placeholders={
                 "rules": sms_rule_summary_lines(self.sms_command_rules),
+                "collision_count": str(len(find_rule_collisions(self.sms_command_rules))),
             },
+        )
+
+    async def async_step_sms_security(self, user_input: dict[str, Any] | None = None):
+        """Configure global and per-sender command abuse protection."""
+        managed_keys = (
+            CONF_SMS_SECURITY_GLOBAL_LIMIT,
+            CONF_SMS_SECURITY_SENDER_LIMIT,
+            CONF_SMS_SECURITY_WINDOW_S,
+            CONF_SMS_SECURITY_PIN_FAILURE_LIMIT,
+            CONF_SMS_SECURITY_LOCKOUT_S,
+        )
+        if user_input is not None:
+            update_managed_options(self.working_options, user_input, managed_keys)
+            return await self.async_step_sms_commands()
+        return self.async_show_form(
+            step_id="sms_security",
+            data_schema=sms_security_schema(self.working_options),
+        )
+
+    async def async_step_test_sms_rule(self, user_input: dict[str, Any] | None = None):
+        """Dry-run sender/message matching without invoking any service."""
+        defaults = user_input or {}
+        result = "Wpisz numer i wiadomość. Tester nie zmienia stanu encji."
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            sender = str(user_input.get(CONF_SMS_RULE_TEST_SENDER, "")).strip()
+            message = str(user_input.get(CONF_SMS_RULE_TEST_MESSAGE, "")).strip()
+            try:
+                sender = normalize_phone_number(sender)
+            except ValueError:
+                errors["base"] = "invalid_sender"
+            else:
+                matched: SmsCommandRule | None = None
+                captured = ""
+                pin_status = "not_required"
+                for rule in self.sms_command_rules:
+                    if not rule.enabled or not sms_rule_matches_sender(
+                        rule, sender, {item.id: item for item in self.available_recipients}
+                    ):
+                        continue
+                    recipient = self._recipient_by_id(rule.saved_recipient_id)
+                    pin_hash = rule.pin_hash or (recipient.pin_hash if recipient else "")
+                    command_message, supplied_pin = (
+                        split_trailing_pin(message) if pin_hash else (message, "")
+                    )
+                    value = match_rule_message(rule, command_message)
+                    if value is None:
+                        continue
+                    matched = rule
+                    captured = value
+                    pin_status = (
+                        "valid" if verify_pin(supplied_pin, pin_hash) else "invalid"
+                    ) if pin_hash else "not_required"
+                    break
+                if matched is None:
+                    result = "Brak pasującej reguły."
+                else:
+                    result = (
+                        f"Reguła: {matched.name}; akcja: {matched.action}; "
+                        f"encje: {', '.join(matched.targets)}; value: {captured or '-'}; "
+                        f"PIN: {pin_status}; challenge: "
+                        f"{'tak' if matched.challenge_required else 'nie'}. Nic nie wykonano."
+                    )
+        return self.async_show_form(
+            step_id="test_sms_rule",
+            data_schema=sms_rule_test_schema(defaults),
+            errors=errors,
+            description_placeholders={"result": result},
+        )
+
+    async def async_step_reorder_sms_rules(self, user_input: dict[str, Any] | None = None):
+        """Move a rule and persist explicit descending priorities."""
+        rules = list(self.sms_command_rules)
+        if not rules:
+            return self.async_abort(reason="no_sms_rules")
+        if user_input is not None:
+            selected_id = str(user_input.get(CONF_SMS_RULE_ID, ""))
+            direction = str(user_input.get(CONF_SMS_RULE_DIRECTION, "up"))
+            index = next((i for i, rule in enumerate(rules) if rule.id == selected_id), -1)
+            target = index - 1 if direction == "up" else index + 1
+            if index >= 0 and 0 <= target < len(rules):
+                rules[index], rules[target] = rules[target], rules[index]
+            rules = [
+                replace(rule, priority=(len(rules) - position) * 10)
+                for position, rule in enumerate(rules)
+            ]
+            self.working_options[CONF_SMS_COMMAND_RULES] = serialize_sms_command_rules(rules)
+            return await self.async_step_sms_commands()
+        return self.async_show_form(
+            step_id="reorder_sms_rules",
+            data_schema=sms_rule_reorder_schema(tuple(rules)),
+        )
+
+    def _export_payload(self) -> str:
+        security_keys = (
+            CONF_SMS_SECURITY_GLOBAL_LIMIT,
+            CONF_SMS_SECURITY_SENDER_LIMIT,
+            CONF_SMS_SECURITY_WINDOW_S,
+            CONF_SMS_SECURITY_PIN_FAILURE_LIMIT,
+            CONF_SMS_SECURITY_LOCKOUT_S,
+        )
+        return json.dumps(
+            {
+                "version": 1,
+                "recipients": serialize_saved_recipients(self.available_recipients),
+                "sms_command_rules": serialize_sms_command_rules(self.sms_command_rules),
+                "security": {
+                    key: self.working_options.get(key)
+                    for key in security_keys
+                    if key in self.working_options
+                },
+            },
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+
+    async def async_step_export_sms_configuration(self, user_input: dict[str, Any] | None = None):
+        """Show a portable JSON export; PIN values remain salted hashes."""
+        if user_input is not None:
+            return await self.async_step_sms_commands()
+        return self.async_show_form(
+            step_id="export_sms_configuration",
+            data_schema=import_export_schema(self._export_payload()),
+        )
+
+    async def async_step_import_sms_configuration(self, user_input: dict[str, Any] | None = None):
+        """Import validated contacts, rules and security limits from JSON."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            raw = str(user_input.get(CONF_IMPORT_EXPORT_PAYLOAD, ""))
+            try:
+                if len(raw) > 250_000:
+                    raise ValueError
+                payload = json.loads(raw)
+                if not isinstance(payload, dict):
+                    raise ValueError
+                recipients_raw = payload.get("recipients", [])
+                rules_raw = payload.get("sms_command_rules", [])
+                if not isinstance(recipients_raw, list) or not isinstance(rules_raw, list):
+                    raise ValueError
+                recipients = load_saved_recipients(recipients_raw)
+                rules = load_sms_command_rules(rules_raw)
+                if len(recipients) != len(recipients_raw) or len(rules) != len(rules_raw):
+                    raise ValueError
+                security = payload.get("security", {})
+                if not isinstance(security, dict):
+                    raise ValueError
+                security_values: dict[str, int] = {}
+                for key, default, minimum, maximum in (
+                    (CONF_SMS_SECURITY_GLOBAL_LIMIT, DEFAULT_SMS_SECURITY_GLOBAL_LIMIT, 1, 1000),
+                    (CONF_SMS_SECURITY_SENDER_LIMIT, DEFAULT_SMS_SECURITY_SENDER_LIMIT, 1, 1000),
+                    (CONF_SMS_SECURITY_WINDOW_S, DEFAULT_SMS_SECURITY_WINDOW_S, 10, 3600),
+                    (CONF_SMS_SECURITY_PIN_FAILURE_LIMIT, DEFAULT_SMS_SECURITY_PIN_FAILURE_LIMIT, 1, 100),
+                    (CONF_SMS_SECURITY_LOCKOUT_S, DEFAULT_SMS_SECURITY_LOCKOUT_S, 10, 86400),
+                ):
+                    if key in security:
+                        security_values[key] = max(
+                            minimum, min(maximum, int(security.get(key, default)))
+                        )
+            except (TypeError, ValueError, json.JSONDecodeError):
+                errors["base"] = "invalid_import_payload"
+            else:
+                self.working_options[CONF_SAVED_RECIPIENTS] = serialize_saved_recipients(recipients)
+                self.working_options[CONF_SMS_COMMAND_RULES] = serialize_sms_command_rules(rules)
+                self.working_options.update(security_values)
+                return await self.async_step_sms_commands()
+        return self.async_show_form(
+            step_id="import_sms_configuration",
+            data_schema=import_export_schema(
+                str((user_input or {}).get(CONF_IMPORT_EXPORT_PAYLOAD, ""))
+            ),
+            errors=errors,
         )
 
     def _validated_sms_rule(
@@ -1287,6 +1704,7 @@ class QTronicSmsGatewayOptionsFlow(OptionsFlow):
         rule_id: str,
     ) -> SmsCommandRule:
         """Validate and normalize one SMS command rule form submission."""
+        existing = self._sms_rule_by_id(rule_id)
         name = " ".join(str(user_input.get(SMS_RULE_NAME, "")).split())
         command = " ".join(str(user_input.get(SMS_RULE_COMMAND, "")).split())
         sender_mode = str(user_input.get(SMS_RULE_SENDER_MODE, ""))
@@ -1296,19 +1714,70 @@ class QTronicSmsGatewayOptionsFlow(OptionsFlow):
         sender_phone = str(user_input.get(SMS_RULE_SENDER_PHONE, "") or "").strip()
         match_mode = str(user_input.get(SMS_RULE_MATCH_MODE, ""))
         action = str(user_input.get(SMS_RULE_ACTION, ""))
-        entity_value = str(user_input.get(SMS_RULE_ENTITY_ID, "")).strip()
-        entity_id = (
-            er.async_resolve_entity_id(er.async_get(self.hass), entity_value)
-            or entity_value
+        entity_values = user_input.get(SMS_RULE_ENTITY_ID, [])
+        if isinstance(entity_values, str):
+            entity_values = [entity_values]
+        registry = er.async_get(self.hass)
+        entity_ids = tuple(
+            dict.fromkeys(
+                (
+                    er.async_resolve_entity_id(registry, str(entity_value).strip())
+                    or str(entity_value).strip()
+                )
+                for entity_value in entity_values
+                if str(entity_value).strip()
+            )
         )
         reply_enabled = bool(user_input.get(SMS_RULE_REPLY_ENABLED, True))
         success_reply = str(user_input.get(SMS_RULE_SUCCESS_REPLY, "") or "").strip()
         failure_reply = str(user_input.get(SMS_RULE_FAILURE_REPLY, "") or "").strip()
+        priority = max(-1000, min(1000, int(user_input.get(SMS_RULE_PRIORITY, 0))))
+        cooldown_s = max(0, min(86400, int(user_input.get(SMS_RULE_COOLDOWN_S, DEFAULT_SMS_RULE_COOLDOWN_S))))
+        challenge_ttl_s = max(
+            30,
+            min(900, int(user_input.get(SMS_RULE_CHALLENGE_TTL_S, DEFAULT_SMS_RULE_CHALLENGE_TTL_S))),
+        )
+        try:
+            raw_pin = validate_pin(str(user_input.get(SMS_RULE_PIN, "") or ""))
+        except ValueError as err:
+            raise ValueError("invalid_pin") from err
+        pin_required = bool(user_input.get(SMS_RULE_PIN_REQUIRED, False))
+        pin_hash = (
+            hash_pin(raw_pin)
+            if raw_pin
+            else existing.pin_hash
+            if existing and pin_required
+            else ""
+        )
+        condition_after = str(user_input.get(SMS_RULE_CONDITION_AFTER, "") or "").strip()
+        condition_before = str(user_input.get(SMS_RULE_CONDITION_BEFORE, "") or "").strip()
+        condition_entity_value = str(user_input.get(SMS_RULE_CONDITION_ENTITY_ID, "") or "").strip()
+        condition_entity_id = (
+            er.async_resolve_entity_id(registry, condition_entity_value)
+            or condition_entity_value
+        )
+        condition_state = str(user_input.get(SMS_RULE_CONDITION_STATE, "") or "").strip()
+        service_data_text = str(user_input.get(SMS_RULE_SERVICE_DATA, "") or "").strip()
+        try:
+            service_data = json.loads(service_data_text) if service_data_text else {}
+        except (TypeError, ValueError) as err:
+            raise ValueError("invalid_service_data") from err
+        forbidden_service_keys = {ATTR_ENTITY_ID, "code", "password", "pin", "token"}
+        if not isinstance(service_data, dict) or any(
+            str(key).casefold() in forbidden_service_keys for key in service_data
+        ):
+            raise ValueError("invalid_service_data")
+        if len(service_data_text) > 4096:
+            raise ValueError("invalid_service_data")
 
         if not name:
             raise ValueError("invalid_rule_name")
         if not normalize_inbound_text(command):
             raise ValueError("invalid_command")
+        if command.casefold().count("{value}") > 1:
+            raise ValueError("invalid_command")
+        if len(entity_ids) < 1 or len(entity_ids) > 20:
+            raise ValueError("entity_not_found")
         if sender_mode == SMS_RULE_SENDER_SAVED:
             recipient = self._recipient_by_id(saved_recipient_id)
             if recipient is None:
@@ -1322,24 +1791,45 @@ class QTronicSmsGatewayOptionsFlow(OptionsFlow):
             saved_recipient_id = ""
         else:
             raise ValueError("invalid_sender")
+        if not canonical_authorization_number(sender_phone):
+            raise ValueError("invalid_sender")
+        if pin_required and not pin_hash:
+            recipient_pin_hash = (
+                recipient.pin_hash
+                if sender_mode == SMS_RULE_SENDER_SAVED and recipient.pin_required
+                else ""
+            )
+            if not recipient_pin_hash:
+                raise ValueError("invalid_pin")
 
-        state = self.hass.states.get(entity_id)
-        if state is None:
+        states = [self.hass.states.get(entity_id) for entity_id in entity_ids]
+        if any(state is None for state in states):
             raise ValueError("entity_not_found")
         if match_mode not in SMS_RULE_MATCH_MODES:
             raise ValueError("invalid_command")
-        if action not in {
-            SMS_RULE_ACTION_TURN_ON,
-            SMS_RULE_ACTION_TURN_OFF,
-            SMS_RULE_ACTION_TOGGLE,
-            SMS_RULE_ACTION_REPORT_STATE,
-        }:
+        if action not in SMS_RULE_ACTIONS:
             raise ValueError("unsupported_entity")
-        if (
-            action != SMS_RULE_ACTION_REPORT_STATE
-            and entity_id.partition(".")[0] not in CONTROL_ENTITY_DOMAINS
+        if any(
+            not action_supports_domain(action, entity_id.partition(".")[0])
+            for entity_id in entity_ids
         ):
             raise ValueError("unsupported_entity")
+        if action == SMS_RULE_ACTION_SET_VALUE and "{value}" not in command.casefold():
+            raise ValueError("missing_value_placeholder")
+        for time_value in (condition_after, condition_before):
+            if time_value:
+                parts = time_value.split(":")
+                if (
+                    len(parts) != 2
+                    or not all(part.isdigit() for part in parts)
+                    or not 0 <= int(parts[0]) <= 23
+                    or not 0 <= int(parts[1]) <= 59
+                ):
+                    raise ValueError("invalid_time_condition")
+        if bool(condition_entity_id) != bool(condition_state):
+            raise ValueError("invalid_state_condition")
+        if condition_entity_id and self.hass.states.get(condition_entity_id) is None:
+            raise ValueError("entity_not_found")
 
         if action == SMS_RULE_ACTION_REPORT_STATE:
             reply_enabled = True
@@ -1372,7 +1862,7 @@ class QTronicSmsGatewayOptionsFlow(OptionsFlow):
             if (
                 (
                     same_saved_recipient
-                    or phone_numbers_match(existing_phone, sender_phone)
+                    or authorization_numbers_match(existing_phone, sender_phone)
                 )
                 and normalize_inbound_text(existing.command) == normalized_command
                 and existing.match_mode == match_mode
@@ -1389,10 +1879,22 @@ class QTronicSmsGatewayOptionsFlow(OptionsFlow):
             command=command,
             match_mode=match_mode,
             action=action,
-            entity_id=entity_id,
+            entity_id=entity_ids[0],
+            entity_ids=entity_ids,
             reply_enabled=reply_enabled,
             success_reply=success_reply,
             failure_reply=failure_reply,
+            priority=priority,
+            cooldown_s=cooldown_s,
+            pin_hash=pin_hash,
+            pin_required=pin_required,
+            challenge_required=bool(user_input.get(SMS_RULE_CHALLENGE_REQUIRED, False)),
+            challenge_ttl_s=challenge_ttl_s,
+            condition_after=condition_after,
+            condition_before=condition_before,
+            condition_entity_id=condition_entity_id,
+            condition_state=condition_state,
+            service_data=service_data,
         )
 
     async def async_step_add_sms_rule(

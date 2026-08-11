@@ -13,6 +13,9 @@ Sim800LComponent = sim800l_ns.class_("Sim800LComponent", cg.Component)
 
 # Actions
 Sim800LSendSmsAction = sim800l_ns.class_("Sim800LSendSmsAction", automation.Action)
+Sim800LSendSmsUnicodeAction = sim800l_ns.class_(
+    "Sim800LSendSmsUnicodeAction", automation.Action
+)
 Sim800LSendUssdAction = sim800l_ns.class_("Sim800LSendUssdAction", automation.Action)
 Sim800LDialAction = sim800l_ns.class_("Sim800LDialAction", automation.Action)
 Sim800LConnectAction = sim800l_ns.class_("Sim800LConnectAction", automation.Action)
@@ -97,6 +100,22 @@ SIM800L_SEND_SMS_SCHEMA = cv.Schema(
     synchronous=True,
 )
 async def sim800l_send_sms_to_code(config, action_id, template_arg, args):
+    paren = await cg.get_variable(config[CONF_ID])
+    var = cg.new_Pvariable(action_id, template_arg, paren)
+    template_ = await cg.templatable(config[CONF_RECIPIENT], args, cg.std_string)
+    cg.add(var.set_recipient(template_))
+    template_ = await cg.templatable(config[CONF_MESSAGE], args, cg.std_string)
+    cg.add(var.set_message(template_))
+    return var
+
+
+@automation.register_action(
+    "sim800l.send_sms_unicode",
+    Sim800LSendSmsUnicodeAction,
+    SIM800L_SEND_SMS_SCHEMA,
+    synchronous=True,
+)
+async def sim800l_send_sms_unicode_to_code(config, action_id, template_arg, args):
     paren = await cg.get_variable(config[CONF_ID])
     var = cg.new_Pvariable(action_id, template_arg, paren)
     template_ = await cg.templatable(config[CONF_RECIPIENT], args, cg.std_string)

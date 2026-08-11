@@ -76,3 +76,47 @@ call_to:
           max: 3600
           step: 1
           mode: box
+
+hangup:
+  name: Hang up
+  description: Immediately request disconnect on one Q-Tronic SMS Gateway.
+  fields:
+    config_entry_id:
+      name: Config entry ID
+      description: Required when more than one gateway is configured.
+      advanced: true
+      selector:
+        text:
+
+cancel_batch:
+  name: Cancel batch
+  description: Cancel an active or queued SMS/call batch when supported by the add-on backend.
+  fields:
+    config_entry_id:
+      name: Config entry ID
+      description: Required when more than one gateway is configured.
+      advanced: true
+      selector:
+        text:
+    batch_id:
+      name: Batch ID
+      description: Optional backend batch identifier. Leave empty to cancel the active batch.
+      selector:
+        text:
+
+send_ussd:
+  name: Send USSD
+  description: Send a USSD code when the firmware and add-on backend advertise this capability.
+  fields:
+    config_entry_id:
+      name: Config entry ID
+      description: Required when more than one gateway is configured.
+      advanced: true
+      selector:
+        text:
+    code:
+      name: USSD code
+      description: USSD request, for example *100#.
+      required: true
+      selector:
+        text:

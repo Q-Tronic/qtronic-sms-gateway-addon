@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.5.0
+
+- Unify GSM, Unicode SMS, USSD, and modem recovery behind a single bounded SIM800 state machine
+- Add operation-specific modem deadlines, safe prompt cancellation, accurate RSSI conversion, and transport diagnostics
+- Add authenticated and rate-limited REST access with strict request and phone-number validation
+- Add persistent history, event outbox, SMS queue metadata, retry policy, and GSM-7/UCS2 segment accounting
+- Resume SMS retries from the exact unsent recipient and segment without duplicating confirmed parts
+- Keep canceled jobs terminal and bound synchronous REST waits even while ESPHome is offline
+- Make call hangup and batch cancellation preempt active retries instead of waiting behind the modem queue
+- Let MQTT hangup and cancel remain responsive during retry-forever calls and guarantee modem disconnect cleanup
+- Prevent inbound SMS content from being interpreted as HTML in the Ingress dashboard
+- Mask message content, phone numbers, terminal results, and operational logs according to the selected privacy level
+- Extend SMS rules with strict sender authorization, optional PIN/challenge protection, cooldowns, priorities, parameters, conditions, multi-entity status, and additional Home Assistant domains
+- Add rule testing and conflict detection, native hangup/cancel/USSD services, diagnostics, and import/export support
+- Improve MQTT lifecycle handling, gateway identity, privacy controls, and automated regression coverage
+- Verify the bundled integration on Home Assistant 2026.8 / Python 3.14 and add CI for tests, lint, schemas, and the add-on image
+
 ## 0.4.15
 
 - Replace the ESP8266 busy-wait software-UART receiver with edge-buffered EspSoftwareSerial 8.0.1

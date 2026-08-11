@@ -50,7 +50,16 @@ from .sms import (
     normalize_encoding,
     normalize_inbound_text,
     resolve_auto_encoding,
+    sms_segment_info,
+    split_sms_message,
     transliterate_sms_text,
+)
+from .storage import PersistentStore, TERMINAL_OUTBOX_STATES
+from .validation import (
+    MAX_SMS_CHARACTERS,
+    UssdRequest,
+    parse_ring_time,
+    validate_resolved_recipients,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -71,6 +80,17 @@ ROLE_SMS_MESSAGE = "sms_message"
 ROLE_INCOMING_CALL = "incoming_call"
 ROLE_CALL_STATE = "call_state"
 ROLE_USSD = "ussd"
+ROLE_SMS_STATUS = "sms_status"
+ROLE_SMS_LAST_ERROR = "sms_last_error"
+ROLE_SMS_QUEUE_DEPTH = "sms_queue_depth"
+ROLE_SMS_SENT_COUNT = "sms_sent_count"
+ROLE_SMS_FAILED_COUNT = "sms_failed_count"
+ROLE_SMS_UNKNOWN_COUNT = "sms_unknown_count"
+ROLE_SIM800_STATE = "sim800_state"
+ROLE_SIM800_TIMEOUT_COUNT = "sim800_timeout_count"
+ROLE_SIM800_RECOVERY_COUNT = "sim800_recovery_count"
+ROLE_UART_RX_OVERFLOW_COUNT = "uart_rx_overflow_count"
+ROLE_SIM800_LAST_RESPONSE_AGE = "sim800_last_response_age"
 
 AUTO_DETECT_OBJECT_IDS: dict[str, tuple[str, ...]] = {
     ROLE_RSSI: ("rssi", "signal", "signal_strength"),
@@ -81,7 +101,44 @@ AUTO_DETECT_OBJECT_IDS: dict[str, tuple[str, ...]] = {
     ROLE_INCOMING_CALL: ("incoming_call", "caller_id", "call"),
     ROLE_CALL_STATE: ("call_state", "gsm_call_state", "sim800_call_state"),
     ROLE_USSD: ("ussd", "ussd_message"),
+    ROLE_SMS_STATUS: ("sms_status",),
+    ROLE_SMS_LAST_ERROR: ("sms_last_error",),
+    ROLE_SMS_QUEUE_DEPTH: ("sms_queue_depth",),
+    ROLE_SMS_SENT_COUNT: ("sms_sent_count",),
+    ROLE_SMS_FAILED_COUNT: ("sms_failed_count",),
+    ROLE_SMS_UNKNOWN_COUNT: ("sms_unknown_count",),
+    ROLE_SIM800_STATE: ("sim800_state",),
+    ROLE_SIM800_TIMEOUT_COUNT: ("sim800_timeout_count",),
+    ROLE_SIM800_RECOVERY_COUNT: ("sim800_recovery_count",),
+    ROLE_UART_RX_OVERFLOW_COUNT: ("uart_rx_overflow_count",),
+    ROLE_SIM800_LAST_RESPONSE_AGE: ("sim800_last_response_age",),
 }
+
+TEXT_ROLES = {
+    ROLE_SMS_SENDER,
+    ROLE_SMS_MESSAGE,
+    ROLE_INCOMING_CALL,
+    ROLE_CALL_STATE,
+    ROLE_USSD,
+    ROLE_SMS_STATUS,
+    ROLE_SMS_LAST_ERROR,
+    ROLE_SIM800_STATE,
+}
+NUMERIC_ROLES = {
+    ROLE_RSSI,
+    ROLE_SMS_QUEUE_DEPTH,
+    ROLE_SMS_SENT_COUNT,
+    ROLE_SMS_FAILED_COUNT,
+    ROLE_SMS_UNKNOWN_COUNT,
+    ROLE_SIM800_TIMEOUT_COUNT,
+    ROLE_SIM800_RECOVERY_COUNT,
+    ROLE_UART_RX_OVERFLOW_COUNT,
+    ROLE_SIM800_LAST_RESPONSE_AGE,
+}
+
+
+class JobCancelled(RuntimeError):
+    """Raised internally when an active or queued transport job is canceled."""
 
 
 def normalize_object_id(value: str | None) -> str | None:
@@ -90,6 +147,16 @@ def normalize_object_id(value: str | None) -> str | None:
         return None
     normalized = re.sub(r"[^a-z0-9]+", "_", value.strip().lower()).strip("_")
     return normalized or None
+
+
+def mask_phone_for_log(value: str | None) -> str:
+    """Return a non-reversible phone label suitable for INFO logs."""
+    digits = re.sub(r"\D", "", value or "")
+    if not digits:
+        return "unknown"
+    suffix = digits[-4:]
+    prefix = "+" if (value or "").strip().startswith("+") else ""
+    return prefix + "*" * max(3, len(digits) - len(suffix)) + suffix
 
 
 def state_as_float(state: EntityState | None) -> float | None:
@@ -153,7 +220,9 @@ class CallBatchDiagnostics:
 class GatewayService:
     """Bridge between ESPHome Native API and add-on APIs."""
 
-    def __init__(self, config: AddonConfig) -> None:
+    def __init__(
+        self, config: AddonConfig, store: PersistentStore | None = None
+    ) -> None:
         self.config = config
         self.available = False
         self.device: DeviceInfo | None = None
@@ -166,10 +235,16 @@ class GatewayService:
         self._listeners: set[Callable[[dict[str, Any]], Awaitable[None] | None]] = set()
         self._state_event = asyncio.Event()
         self._state_version = 0
+        self._role_versions: dict[str, int] = {}
+        self._sms_status_results: deque[tuple[int, str]] = deque(maxlen=32)
         self._send_lock = asyncio.Lock()
         self._queued_job_count = 0
         self._active_job_kind: str | None = None
         self._active_job_id: str | None = None
+        self._active_cancel_event: asyncio.Event | None = None
+        self._queued_cancel_events: dict[str, tuple[str, asyncio.Event]] = {}
+        self._canceled_job_ids: set[str] = set()
+        self._disconnect_completed_job_ids: set[str] = set()
         self._warmup_until = 0.0
         self._recent_events: deque[dict[str, Any]] = deque(maxlen=100)
         self._started_at = time()
@@ -180,6 +255,14 @@ class GatewayService:
         self._last_sms_event_at = 0.0
         self._last_incoming_call_signature: str | None = None
         self._last_incoming_call_event_at = 0.0
+        self.store = store or PersistentStore(config.history)
+        self.gateway_uuid: str | None = None
+        self._store_ready = False
+        self._outbox_task: asyncio.Task[None] | None = None
+        self._outbox_wakeup = asyncio.Event()
+        self._outbox_changed = asyncio.Event()
+        self._outbox_depth_cache = 0
+        self._history_tasks: set[asyncio.Task[None]] = set()
 
     @property
     def host(self) -> str:
@@ -217,6 +300,10 @@ class GatewayService:
     def disconnect_action(self) -> str:
         return self.config.esphome.disconnect_action
 
+    @property
+    def send_ussd_action(self) -> str:
+        return self.config.esphome.send_ussd_action
+
     def _service_supports_sms(self, service_name: str) -> bool:
         service = self.user_services.get(service_name)
         if service is None:
@@ -244,9 +331,16 @@ class GatewayService:
 
     @property
     def can_place_calls(self) -> bool:
-        return self._service_supports_recipient_only(self.dial_action) and self._service_exists(
-            self.disconnect_action
-        )
+        return self._service_supports_recipient_only(
+            self.dial_action
+        ) and self._service_exists(self.disconnect_action)
+
+    @property
+    def can_send_ussd(self) -> bool:
+        service = self.user_services.get(self.send_ussd_action)
+        if service is None:
+            return False
+        return any(arg.name in {"code", "ussd", "request"} for arg in service.args)
 
     @property
     def has_call_state_tracking(self) -> bool:
@@ -263,7 +357,9 @@ class GatewayService:
 
         return _remove
 
-    def _dispatch_event(self, event_type: str, payload: dict[str, Any], *, store: bool = True) -> None:
+    def _dispatch_event(
+        self, event_type: str, payload: dict[str, Any], *, store: bool = True
+    ) -> None:
         event = {
             "type": event_type,
             "timestamp": time(),
@@ -271,64 +367,84 @@ class GatewayService:
         }
         if store:
             self._recent_events.appendleft(event)
+            if self._store_ready:
+                task = asyncio.create_task(self.store.append_history(event))
+                self._history_tasks.add(task)
+                task.add_done_callback(self._history_task_done)
         self._log_event_summary(event)
         for listener in tuple(self._listeners):
             result = listener(event)
             if asyncio.iscoroutine(result):
                 asyncio.create_task(result)
 
+    def _history_task_done(self, task: asyncio.Task[None]) -> None:
+        self._history_tasks.discard(task)
+        if task.cancelled():
+            return
+        error = task.exception()
+        if error is not None:
+            _LOGGER.warning("Failed to persist gateway history event: %s", error)
+
     def _log_event_summary(self, event: dict[str, Any]) -> None:
         event_type = event.get("type")
         if event_type == "sms_received":
-            sender = event.get("saved_recipient_name") or event.get("sender")
-            _LOGGER.info("SMS received from %s: %s", sender, event.get("message"))
+            sender = event.get("saved_recipient_name") or mask_phone_for_log(
+                str(event.get("sender") or "")
+            )
+            _LOGGER.info(
+                "SMS received from %s (length=%s)",
+                sender,
+                len(str(event.get("message") or "")),
+            )
         elif event_type == "incoming_call":
-            caller = event.get("saved_recipient_name") or event.get("caller")
+            caller = event.get("saved_recipient_name") or mask_phone_for_log(
+                str(event.get("caller") or "")
+            )
             _LOGGER.info("Incoming call from %s", caller)
         elif event_type == "sms_batch_started":
             _LOGGER.info(
                 "SMS batch %s started for %s (encoding=%s, len=%s)",
                 event.get("batch_id"),
-                ", ".join(event.get("recipients", [])),
+                len(event.get("recipients", [])),
                 event.get("encoding"),
                 event.get("message_length"),
             )
         elif event_type == "sms_sent":
             _LOGGER.info(
-                "SMS batch %s sent to %s (encoding=%s): %s",
+                "SMS batch %s confirmed for %s (encoding=%s, length=%s)",
                 event.get("batch_id"),
-                event.get("recipient_label"),
+                mask_phone_for_log(str(event.get("recipient") or "")),
                 event.get("encoding"),
-                event.get("message"),
+                event.get("message_length"),
             )
         elif event_type == "sms_batch_finished":
             _LOGGER.info(
-                "SMS batch %s finished with status=%s completed=%s failed=%s error=%s",
+                "SMS batch %s finished with status=%s completed_count=%s failed=%s",
                 event.get("batch_id"),
                 event.get("status"),
-                event.get("completed_recipients"),
-                event.get("failed_recipient"),
-                event.get("last_error"),
+                len(event.get("completed_recipients", [])),
+                bool(event.get("failed_recipient")),
             )
         elif event_type == "call_batch_started":
             _LOGGER.info(
                 "Call batch %s started for %s (ring_time=%ss)",
                 event.get("batch_id"),
-                ", ".join(event.get("recipients", [])),
+                len(event.get("recipients", [])),
                 event.get("ring_time_s"),
             )
         elif event_type == "call_batch_finished":
             _LOGGER.info(
-                "Call batch %s finished with status=%s completed=%s failed=%s unknown=%s error=%s",
+                "Call batch %s finished with status=%s completed_count=%s failed_count=%s unknown_count=%s",
                 event.get("batch_id"),
                 event.get("status"),
-                event.get("completed_recipients"),
-                event.get("failed_recipients"),
-                event.get("unknown_recipients"),
-                event.get("last_error"),
+                len(event.get("completed_recipients", [])),
+                len(event.get("failed_recipients", [])),
+                len(event.get("unknown_recipients", [])),
             )
         elif event_type == "call_hung_up":
-            _LOGGER.info("Active call has been hung up using action=%s", event.get("action"))
+            _LOGGER.info(
+                "Active call has been hung up using action=%s", event.get("action")
+            )
 
     def events_snapshot(self) -> list[dict[str, Any]]:
         return list(self._recent_events)
@@ -345,6 +461,17 @@ class GatewayService:
             ROLE_INCOMING_CALL,
             ROLE_CALL_STATE,
             ROLE_USSD,
+            ROLE_SMS_STATUS,
+            ROLE_SMS_LAST_ERROR,
+            ROLE_SMS_QUEUE_DEPTH,
+            ROLE_SMS_SENT_COUNT,
+            ROLE_SMS_FAILED_COUNT,
+            ROLE_SMS_UNKNOWN_COUNT,
+            ROLE_SIM800_STATE,
+            ROLE_SIM800_TIMEOUT_COUNT,
+            ROLE_SIM800_RECOVERY_COUNT,
+            ROLE_UART_RX_OVERFLOW_COUNT,
+            ROLE_SIM800_LAST_RESPONSE_AGE,
         ):
             role_values[role] = state_as_value(self.state_for_role(role))
 
@@ -365,6 +492,8 @@ class GatewayService:
             sim800_status = "unknown"
 
         return {
+            "gateway_uuid": self.gateway_uuid,
+            "api_version": 2,
             "available": self.available,
             "component_status": {
                 "esp": esp_status,
@@ -378,7 +507,8 @@ class GatewayService:
                 "manufacturer": self.device.manufacturer if self.device else None,
                 "esphome_version": self.device.esphome_version if self.device else None,
             },
-            "queue_depth": self._queued_job_count,
+            "queue_depth": self._queued_job_count + self._outbox_depth_cache,
+            "persistent_outbox_depth": self._outbox_depth_cache,
             "active_job_kind": self._active_job_kind,
             "active_job_id": self._active_job_id,
             "last_connect_error": self._last_connect_error,
@@ -387,6 +517,7 @@ class GatewayService:
                 "send_sms": self.can_send_sms,
                 "send_sms_unicode": self.can_send_unicode_sms,
                 "call": self.can_place_calls,
+                "send_ussd": self.can_send_ussd,
             },
             "states": role_values,
             "saved_recipients": [
@@ -422,7 +553,9 @@ class GatewayService:
                 "failed_recipient": self.last_call_batch.failed_recipient,
                 "last_error": self.last_call_batch.last_error,
                 "ring_time_s": self.last_call_batch.ring_time_s,
-                "attempts": {name: count for name, count in self.last_call_batch.attempts},
+                "attempts": {
+                    name: count for name, count in self.last_call_batch.attempts
+                },
             },
         }
 
@@ -499,7 +632,9 @@ class GatewayService:
                 recipient_ids.append(token)
             else:
                 recipients.append(token)
-        return self.resolve_recipient_numbers(recipients=recipients, recipient_ids=recipient_ids)
+        return self.resolve_recipient_numbers(
+            recipients=recipients, recipient_ids=recipient_ids
+        )
 
     def describe_recipient(self, phone: str) -> str:
         normalized = normalize_phone_number_loose(phone)
@@ -510,6 +645,14 @@ class GatewayService:
 
     async def async_start(self) -> None:
         """Start reconnect logic without blocking add-on startup forever."""
+        await self.store.initialize()
+        self._store_ready = True
+        self.gateway_uuid = await self.store.gateway_uuid()
+        self._outbox_depth_cache = await self.store.outbox_depth()
+        self._outbox_task = asyncio.create_task(
+            self._outbox_worker(), name="qtronic-sms-outbox"
+        )
+        self._outbox_wakeup.set()
         self._client = APIClient(
             self.host,
             self.port,
@@ -528,15 +671,29 @@ class GatewayService:
     async def async_stop(self) -> None:
         self.available = False
         self._dispatch_event("availability", {"available": False}, store=False)
+        if self._outbox_task is not None:
+            self._outbox_task.cancel()
+            try:
+                await self._outbox_task
+            except asyncio.CancelledError:
+                pass
+            self._outbox_task = None
         if self._reconnect_logic is not None:
             await self._reconnect_logic.stop()
             self._reconnect_logic = None
         if self._client is not None:
             await self._client.disconnect(force=True)
             self._client = None
+        if self._history_tasks:
+            await asyncio.gather(*tuple(self._history_tasks), return_exceptions=True)
+        if self._store_ready:
+            await self.store.close()
+            self._store_ready = False
 
     @asynccontextmanager
     async def _transport_job(self, kind: str, job_id: str):
+        cancel_event = asyncio.Event()
+        self._queued_cancel_events[job_id] = (kind, cancel_event)
         self._queued_job_count += 1
         self._dispatch_event(
             "queue_changed",
@@ -547,10 +704,18 @@ class GatewayService:
             },
             store=False,
         )
-        await self._send_lock.acquire()
+        try:
+            await self._send_lock.acquire()
+        except BaseException:
+            self._queued_job_count -= 1
+            self._queued_cancel_events.pop(job_id, None)
+            self._disconnect_completed_job_ids.discard(job_id)
+            raise
         self._queued_job_count -= 1
         self._active_job_kind = kind
         self._active_job_id = job_id
+        self._active_cancel_event = cancel_event
+        self._queued_cancel_events.pop(job_id, None)
         self._dispatch_event(
             "queue_changed",
             {
@@ -561,10 +726,13 @@ class GatewayService:
             store=False,
         )
         try:
-            yield
+            self._raise_if_canceled(cancel_event)
+            yield cancel_event
         finally:
             self._active_job_kind = None
             self._active_job_id = None
+            self._active_cancel_event = None
+            self._disconnect_completed_job_ids.discard(job_id)
             self._send_lock.release()
             self._dispatch_event(
                 "queue_changed",
@@ -576,6 +744,26 @@ class GatewayService:
                 store=False,
             )
 
+    @staticmethod
+    def _raise_if_canceled(cancel_event: asyncio.Event | None) -> None:
+        if cancel_event is not None and cancel_event.is_set():
+            raise JobCancelled("Transport job was canceled.")
+
+    async def _sleep_or_cancel(
+        self, delay_s: float, cancel_event: asyncio.Event | None
+    ) -> None:
+        self._raise_if_canceled(cancel_event)
+        if delay_s <= 0:
+            return
+        if cancel_event is None:
+            await asyncio.sleep(delay_s)
+            return
+        try:
+            await asyncio.wait_for(cancel_event.wait(), timeout=delay_s)
+        except TimeoutError:
+            return
+        raise JobCancelled("Transport job was canceled.")
+
     async def _execute_user_service(
         self, service_name: str, data: dict[str, Any] | None = None
     ) -> None:
@@ -583,29 +771,49 @@ class GatewayService:
             raise RuntimeError("The gateway is currently unavailable.")
         service = self.user_services.get(service_name)
         if service is None:
-            raise RuntimeError(f"ESPHome action '{service_name}' was not found on {self.host}.")
+            raise RuntimeError(
+                f"ESPHome action '{service_name}' was not found on {self.host}."
+            )
         await self._client.execute_service(service, data or {})
 
-    async def _wait_for_call_connected(self, timeout_s: int) -> bool:
+    async def _wait_for_call_connected(
+        self, timeout_s: int, cancel_event: asyncio.Event | None = None
+    ) -> bool:
         deadline = asyncio.get_running_loop().time() + timeout_s
         while True:
-            if (state_as_text(self.state_for_role(ROLE_CALL_STATE)) or "").lower().strip() == "connected":
+            self._raise_if_canceled(cancel_event)
+            if (
+                state_as_text(self.state_for_role(ROLE_CALL_STATE)) or ""
+            ).lower().strip() == "connected":
                 return True
             remaining = deadline - asyncio.get_running_loop().time()
             if remaining <= 0:
                 return (
-                    (state_as_text(self.state_for_role(ROLE_CALL_STATE)) or "").lower().strip()
-                    == "connected"
-                )
+                    state_as_text(self.state_for_role(ROLE_CALL_STATE)) or ""
+                ).lower().strip() == "connected"
             observed_version = self._state_version
             self._state_event.clear()
-            try:
-                await asyncio.wait_for(self._state_event.wait(), remaining)
-            except TimeoutError:
-                return (
-                    (state_as_text(self.state_for_role(ROLE_CALL_STATE)) or "").lower().strip()
-                    == "connected"
-                )
+            state_wait = asyncio.create_task(self._state_event.wait())
+            tasks: set[asyncio.Task[Any]] = {state_wait}
+            cancel_wait: asyncio.Task[Any] | None = None
+            if cancel_event is not None:
+                cancel_wait = asyncio.create_task(cancel_event.wait())
+                tasks.add(cancel_wait)
+            done, pending = await asyncio.wait(
+                tasks, timeout=remaining, return_when=asyncio.FIRST_COMPLETED
+            )
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+            if not done:
+                return False
+            if (
+                cancel_wait is not None
+                and cancel_wait in done
+                and cancel_event.is_set()
+            ):
+                raise JobCancelled("Transport job was canceled.")
             if self._state_version == observed_version:
                 continue
 
@@ -654,11 +862,313 @@ class GatewayService:
         recipients: list[str],
         encoding: str | None = None,
         batch_id: str | None = None,
+        idempotency_key: str | None = None,
+        wait_timeout_s: float = 30,
     ) -> dict[str, Any]:
-        if not recipients:
-            raise RuntimeError("No recipients were provided for the SMS batch.")
+        accepted = await self.async_enqueue_sms_batch(
+            message=message,
+            recipients=recipients,
+            encoding=encoding,
+            batch_id=batch_id,
+            idempotency_key=idempotency_key,
+        )
+        return await self.async_wait_outbox_job(
+            accepted["job_id"], timeout_s=max(0.1, min(300.0, wait_timeout_s))
+        )
+
+    async def async_enqueue_sms_batch(
+        self,
+        *,
+        message: str,
+        recipients: list[str],
+        encoding: str | None = None,
+        batch_id: str | None = None,
+        idempotency_key: str | None = None,
+        message_segments: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Persist an SMS job before acknowledging it to the caller."""
+        if not isinstance(message, str) or not message.strip():
+            raise RuntimeError("SMS message must be a non-empty string.")
+        if len(message) > MAX_SMS_CHARACTERS:
+            raise RuntimeError(
+                f"SMS message cannot exceed {MAX_SMS_CHARACTERS} characters."
+            )
+        normalized_recipients = validate_resolved_recipients(recipients)
+        resolved_encoding = normalize_encoding(
+            encoding or self.config.sms.default_encoding
+        )
+        info = sms_segment_info(
+            message,
+            resolved_encoding,
+            unicode_available=self.can_send_unicode_sms,
+        )
+        if info.segments > self.config.sms.max_segments:
+            raise RuntimeError(
+                f"Message needs {info.segments} SMS segments; configured maximum is "
+                f"{self.config.sms.max_segments}."
+            )
+        if info.segments > 1 and not self.config.sms.split_long:
+            raise RuntimeError(
+                f"Message needs {info.segments} SMS segments, but sms.split_long is disabled."
+            )
+        parts = message_segments
+        if parts is None:
+            parts = (
+                split_sms_message(message, info)
+                if self.config.sms.split_long
+                else [message]
+            )
+        if (
+            not parts
+            or any(not isinstance(part, str) or not part for part in parts)
+            or "".join(parts) != message
+            or len(parts) != info.segments
+        ):
+            raise RuntimeError(
+                "SMS message segments do not match the original message."
+            )
+        payload = {
+            "message": message,
+            "message_segments": parts,
+            "segment_info": info.as_dict(),
+            "recipients": normalized_recipients,
+            "encoding": resolved_encoding,
+            "checkpoint": {
+                "recipient_index": 0,
+                "part_index": 0,
+                "completed_recipients": [],
+                "unknown_recipients": [],
+            },
+        }
+        row, created = await self.store.enqueue_outbox(
+            kind="sms",
+            payload=payload,
+            max_attempts=self.config.sms.retries + 1,
+            idempotency_key=idempotency_key,
+            job_id=batch_id,
+        )
+        self._outbox_depth_cache = await self.store.outbox_depth()
+        if created:
+            self._dispatch_event(
+                "sms_accepted",
+                {
+                    "job_id": row["job_id"],
+                    "batch_id": row["job_id"],
+                    "recipient_count": len(normalized_recipients),
+                    "segments_per_recipient": len(parts),
+                    "encoding": info.encoding,
+                    "message_length": len(message),
+                },
+            )
+            self._outbox_wakeup.set()
+        return {
+            "job_id": row["job_id"],
+            "batch_id": row["job_id"],
+            "status": row["status"],
+            "created": created,
+            "idempotent_replay": not created,
+            "segment_info": info.as_dict(),
+        }
+
+    async def async_wait_outbox_job(
+        self, job_id: str, timeout_s: float | None = 30
+    ) -> dict[str, Any]:
+        bounded_timeout = 30.0 if timeout_s is None else max(0.1, min(300.0, timeout_s))
+        deadline = asyncio.get_running_loop().time() + bounded_timeout
+        while True:
+            row = await self.store.get_outbox(job_id)
+            if row is None:
+                raise RuntimeError(f"Unknown outbox job '{job_id}'.")
+            if row["status"] in TERMINAL_OUTBOX_STATES:
+                result = row.get("result") or {}
+                return {
+                    "job_id": job_id,
+                    "batch_id": job_id,
+                    "status": row["status"],
+                    **result,
+                    "attempts": row["attempts"],
+                    "last_error": row["last_error"],
+                }
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                return {
+                    "job_id": job_id,
+                    "batch_id": job_id,
+                    "status": "accepted",
+                    "delivery_status": row["status"],
+                    "wait_status": "timeout",
+                    "wait_timed_out": True,
+                    "attempts": row["attempts"],
+                }
+            self._outbox_changed.clear()
+            try:
+                await asyncio.wait_for(
+                    self._outbox_changed.wait(), timeout=min(1.0, remaining)
+                )
+            except TimeoutError:
+                pass
+
+    async def _outbox_worker(self) -> None:
+        while True:
+            if not self.available:
+                self._outbox_wakeup.clear()
+                try:
+                    await asyncio.wait_for(self._outbox_wakeup.wait(), timeout=1.0)
+                except TimeoutError:
+                    pass
+                continue
+            row = await self.store.claim_next_outbox(kind="sms")
+            if row is None:
+                await self.async_refresh_outbox_depth()
+                self._outbox_wakeup.clear()
+                try:
+                    await asyncio.wait_for(self._outbox_wakeup.wait(), timeout=1.0)
+                except TimeoutError:
+                    pass
+                continue
+
+            self._outbox_depth_cache = await self.store.outbox_depth()
+            self._outbox_changed.set()
+            job_id = row["job_id"]
+            try:
+                if job_id in self._canceled_job_ids:
+                    raise JobCancelled(
+                        "Outbox job was canceled before transport started."
+                    )
+                if row["kind"] != "sms":
+                    raise RuntimeError(f"Unsupported outbox job kind '{row['kind']}'.")
+                payload = row["payload"]
+
+                async def save_checkpoint(checkpoint: dict[str, Any]) -> None:
+                    payload["checkpoint"] = checkpoint
+                    updated = await self.store.update_outbox_payload(job_id, payload)
+                    if updated is None or updated["status"] == "canceled":
+                        raise JobCancelled("Outbox job was canceled while sending.")
+
+                result = await self._async_send_sms_batch_now(
+                    message=str(payload["message"]),
+                    message_segments=[
+                        str(item) for item in payload.get("message_segments", [])
+                    ],
+                    recipients=[str(item) for item in payload["recipients"]],
+                    encoding=str(
+                        payload.get("encoding") or self.config.sms.default_encoding
+                    ),
+                    batch_id=job_id,
+                    checkpoint=dict(payload.get("checkpoint") or {}),
+                    progress_callback=save_checkpoint,
+                )
+                final_status = str(result.get("status") or "unknown")
+                if final_status not in {"sent", "unknown"}:
+                    final_status = "unknown"
+                await self.store.update_outbox(job_id, final_status, result=result)
+            except JobCancelled as err:
+                await self.store.update_outbox(
+                    job_id,
+                    "canceled",
+                    last_error=str(err),
+                    result={"status": "canceled"},
+                )
+            except Exception as err:
+                current = await self.store.get_outbox(job_id)
+                if (
+                    current is not None
+                    and current["attempts"] < current["max_attempts"]
+                ):
+                    delay = self.config.sms.retry_backoff_s * (
+                        2 ** max(0, current["attempts"] - 1)
+                    )
+                    await self.store.update_outbox(
+                        job_id,
+                        "retry",
+                        last_error=str(err),
+                        next_attempt_at=time() + delay,
+                    )
+                    self._outbox_wakeup.set()
+                else:
+                    await self.store.update_outbox(
+                        job_id,
+                        "failed",
+                        last_error=str(err),
+                        result={"status": "failed"},
+                    )
+            finally:
+                self._canceled_job_ids.discard(job_id)
+                self._outbox_depth_cache = await self.store.outbox_depth()
+                self._outbox_changed.set()
+
+    async def async_refresh_outbox_depth(self) -> int:
+        self._outbox_depth_cache = await self.store.outbox_depth()
+        self._outbox_changed.set()
+        return self._outbox_depth_cache
+
+    async def _wait_for_sms_confirmation(
+        self,
+        version_before_send: int,
+        cancel_event: asyncio.Event | None,
+    ) -> tuple[str, str | None]:
+        if self.entity_info_for_role(ROLE_SMS_STATUS) is None:
+            return "unknown", None
+        deadline = (
+            asyncio.get_running_loop().time() + self.config.sms.confirmation_timeout_s
+        )
+        while True:
+            self._raise_if_canceled(cancel_event)
+            for version, status in tuple(self._sms_status_results):
+                if version <= version_before_send:
+                    continue
+                if status == "sent":
+                    return "sent", None
+                if status == "failed":
+                    error = state_as_text(self.state_for_role(ROLE_SMS_LAST_ERROR))
+                    return "failed", error or "SIM800 reported SMS delivery failure."
+                if status == "unknown":
+                    return "unknown", None
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                return "unknown", "Timed out waiting for SIM800 +CMGS confirmation."
+            observed_version = self._state_version
+            self._state_event.clear()
+            state_wait = asyncio.create_task(self._state_event.wait())
+            waits: set[asyncio.Task[Any]] = {state_wait}
+            cancel_wait: asyncio.Task[Any] | None = None
+            if cancel_event is not None:
+                cancel_wait = asyncio.create_task(cancel_event.wait())
+                waits.add(cancel_wait)
+            done, pending = await asyncio.wait(
+                waits, timeout=remaining, return_when=asyncio.FIRST_COMPLETED
+            )
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+            if (
+                cancel_wait is not None
+                and cancel_wait in done
+                and cancel_event.is_set()
+            ):
+                raise JobCancelled("SMS batch was canceled.")
+            if not done:
+                return "unknown", "Timed out waiting for SIM800 +CMGS confirmation."
+            if self._state_version == observed_version:
+                continue
+
+    async def _async_send_sms_batch_now(
+        self,
+        *,
+        message: str,
+        recipients: list[str],
+        encoding: str | None = None,
+        batch_id: str | None = None,
+        message_segments: list[str] | None = None,
+        checkpoint: dict[str, Any] | None = None,
+        progress_callback: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+    ) -> dict[str, Any]:
         batch_label = batch_id or uuid4().hex[:8]
-        recipient_labels = tuple(self.describe_recipient(recipient) for recipient in recipients)
+        recipient_labels = tuple(
+            self.describe_recipient(recipient) for recipient in recipients
+        )
+        parts = message_segments or [message]
         batch_started = time()
         self._last_sms_batch = SmsBatchDiagnostics(
             status="in_progress",
@@ -678,45 +1188,132 @@ class GatewayService:
             },
         )
 
-        completed: list[str] = []
+        checkpoint = checkpoint or {}
+        start_recipient = max(
+            0, min(len(recipients), int(checkpoint.get("recipient_index", 0)))
+        )
+        start_part = max(0, min(len(parts) - 1, int(checkpoint.get("part_index", 0))))
+        completed = [
+            str(label)
+            for label in checkpoint.get("completed_recipients", [])
+            if str(label) in recipient_labels
+        ]
+        unknown = [
+            str(label)
+            for label in checkpoint.get("unknown_recipients", [])
+            if str(label) in recipient_labels
+        ]
         failed_recipient: str | None = None
         last_error: str | None = None
 
-        async with self._transport_job("sms", batch_label):
-            for index, recipient in enumerate(recipients):
+        async with self._transport_job("sms", batch_label) as cancel_event:
+            for index in range(start_recipient, len(recipients)):
+                recipient = recipients[index]
                 recipient_label = recipient_labels[index]
                 try:
-                    service_name, target, outgoing_message, resolved_mode = self._prepare_outgoing_sms(
-                        message=message,
-                        recipient=recipient,
-                        encoding=encoding,
+                    recipient_outcome = (
+                        "unknown" if recipient_label in unknown else "sent"
                     )
-                    await self._execute_user_service(
-                        service_name,
-                        {"recipient": target, "message": outgoing_message},
-                    )
-                    completed.append(recipient_label)
-                    self._dispatch_event(
-                        "sms_sent",
-                        {
-                            "batch_id": batch_label,
-                            "recipient": recipient,
-                            "recipient_label": recipient_label,
-                            "encoding": resolved_mode,
-                            "message": outgoing_message,
-                            "message_length": len(outgoing_message),
-                        },
-                    )
+                    first_part = start_part if index == start_recipient else 0
+                    for part_index in range(first_part, len(parts)):
+                        part = parts[part_index]
+                        self._raise_if_canceled(cancel_event)
+                        service_name, target, outgoing_message, resolved_mode = (
+                            self._prepare_outgoing_sms(
+                                message=part,
+                                recipient=recipient,
+                                encoding=encoding,
+                            )
+                        )
+                        confirmation_version = self._role_versions.get(
+                            ROLE_SMS_STATUS, 0
+                        )
+                        await self._execute_user_service(
+                            service_name,
+                            {"recipient": target, "message": outgoing_message},
+                        )
+                        self._dispatch_event(
+                            "sms_transport_accepted",
+                            {
+                                "batch_id": batch_label,
+                                "recipient": recipient,
+                                "recipient_label": recipient_label,
+                                "encoding": resolved_mode,
+                                "part": part_index + 1,
+                                "parts": len(parts),
+                                "message_length": len(part),
+                            },
+                        )
+                        (
+                            outcome,
+                            confirmation_error,
+                        ) = await self._wait_for_sms_confirmation(
+                            confirmation_version, cancel_event
+                        )
+                        if outcome == "failed":
+                            raise RuntimeError(
+                                confirmation_error or "SIM800 reported SMS failure."
+                            )
+                        if outcome == "unknown":
+                            recipient_outcome = "unknown"
+                            last_error = confirmation_error
+                            if recipient_label not in unknown:
+                                unknown.append(recipient_label)
+                        elif outcome == "sent":
+                            self._dispatch_event(
+                                "sms_sent",
+                                {
+                                    "batch_id": batch_label,
+                                    "recipient": recipient,
+                                    "recipient_label": recipient_label,
+                                    "encoding": resolved_mode,
+                                    "part": part_index + 1,
+                                    "parts": len(parts),
+                                    "message_length": len(part),
+                                    "confirmed_by": "sms_status",
+                                },
+                            )
+
+                        next_recipient = index
+                        next_part = part_index + 1
+                        if next_part >= len(parts):
+                            next_recipient = index + 1
+                            next_part = 0
+                            if (
+                                recipient_outcome == "sent"
+                                and recipient_label not in completed
+                            ):
+                                completed.append(recipient_label)
+                        if progress_callback is not None:
+                            await progress_callback(
+                                {
+                                    "recipient_index": next_recipient,
+                                    "part_index": next_part,
+                                    "completed_recipients": list(completed),
+                                    "unknown_recipients": list(unknown),
+                                }
+                            )
+                        if part_index < len(parts) - 1:
+                            await self._sleep_or_cancel(
+                                self.config.sms.send_delay_ms / 1000, cancel_event
+                            )
+                except JobCancelled:
+                    raise
                 except Exception as err:
                     failed_recipient = recipient_label
                     last_error = str(err)
                     break
 
                 if index < len(recipients) - 1 and self.config.sms.send_delay_ms > 0:
-                    await asyncio.sleep(self.config.sms.send_delay_ms / 1000)
+                    await self._sleep_or_cancel(
+                        self.config.sms.send_delay_ms / 1000, cancel_event
+                    )
 
+        final_status = (
+            "failed" if failed_recipient else "unknown" if unknown else "sent"
+        )
         self._last_sms_batch = SmsBatchDiagnostics(
-            status="failed" if failed_recipient else "success",
+            status=final_status,
             batch_id=batch_label,
             started_at=batch_started,
             finished_at=time(),
@@ -734,6 +1331,7 @@ class GatewayService:
                 "status": self._last_sms_batch.status,
                 "completed_recipients": list(completed),
                 "failed_recipient": failed_recipient,
+                "unknown_recipients": unknown,
                 "last_error": last_error,
             },
         )
@@ -741,8 +1339,9 @@ class GatewayService:
             raise RuntimeError(last_error or f"SMS failed for {failed_recipient}")
         return {
             "batch_id": batch_label,
-            "status": "success",
+            "status": final_status,
             "completed_recipients": completed,
+            "unknown_recipients": unknown,
         }
 
     async def async_call_batch(
@@ -752,14 +1351,19 @@ class GatewayService:
         ring_time_s: int | None = None,
         batch_id: str | None = None,
     ) -> dict[str, Any]:
-        if not recipients:
-            raise RuntimeError("No recipients were provided for the call batch.")
+        recipients = validate_resolved_recipients(recipients)
         if not self.can_place_calls:
             raise RuntimeError("Dial/disconnect ESPHome actions are not available.")
 
         batch_label = batch_id or uuid4().hex[:8]
-        ring_time = max(1, int(ring_time_s or self.config.calling.default_ring_time_s))
-        recipient_labels = tuple(self.describe_recipient(recipient) for recipient in recipients)
+        ring_time = parse_ring_time(
+            self.config.calling.default_ring_time_s
+            if ring_time_s is None
+            else ring_time_s
+        )
+        recipient_labels = tuple(
+            self.describe_recipient(recipient) for recipient in recipients
+        )
         batch_started = time()
         attempts: dict[str, int] = {label: 0 for label in recipient_labels}
         completed: list[str] = []
@@ -785,55 +1389,76 @@ class GatewayService:
             },
         )
 
-        async with self._transport_job("call", batch_label):
-            for index, recipient in enumerate(recipients):
-                recipient_label = recipient_labels[index]
-                while True:
-                    attempts[recipient_label] += 1
-                    try:
-                        outcome = await self._perform_single_call_attempt(
-                            batch_id=batch_label,
-                            recipient=recipient,
-                            recipient_label=recipient_label,
-                            ring_time_s=ring_time,
-                            attempt=attempts[recipient_label],
+        canceled = False
+        try:
+            async with self._transport_job("call", batch_label) as cancel_event:
+                for index, recipient in enumerate(recipients):
+                    recipient_label = recipient_labels[index]
+                    while True:
+                        self._raise_if_canceled(cancel_event)
+                        attempts[recipient_label] += 1
+                        try:
+                            outcome = await self._perform_single_call_attempt(
+                                batch_id=batch_label,
+                                recipient=recipient,
+                                recipient_label=recipient_label,
+                                ring_time_s=ring_time,
+                                attempt=attempts[recipient_label],
+                                cancel_event=cancel_event,
+                            )
+                            last_error = None
+                        except JobCancelled:
+                            raise
+                        except Exception as err:
+                            outcome = "failed"
+                            last_error = str(err)
+
+                        if outcome == "connected":
+                            completed.append(recipient_label)
+                            break
+                        if outcome == "unknown":
+                            unknown.append(recipient_label)
+                            break
+
+                        last_error = last_error or (
+                            f"Call to {recipient_label} did not connect within {ring_time}s."
                         )
-                        last_error = None
-                    except Exception as err:
-                        outcome = "failed"
-                        last_error = str(err)
+                        retry_allowed = self.config.calling.retry_forever or (
+                            attempts[recipient_label] <= self.config.calling.max_retries
+                        )
+                        if retry_allowed:
+                            await self._sleep_or_cancel(
+                                self.config.calling.retry_delay_s, cancel_event
+                            )
+                            last_error = None
+                            continue
 
-                    if outcome == "connected":
-                        completed.append(recipient_label)
+                        failed_recipient = recipient_label
+                        failed.append(recipient_label)
                         break
-                    if outcome == "unknown":
-                        unknown.append(recipient_label)
+
+                    if (
+                        failed_recipient
+                        and self.config.calling.failure_action == "stop_batch"
+                    ):
                         break
+                    if index < len(recipients) - 1:
+                        await self._sleep_or_cancel(
+                            self.config.calling.delay_between_calls_s, cancel_event
+                        )
+        except JobCancelled as err:
+            canceled = True
+            last_error = str(err)
 
-                    last_error = last_error or (
-                        f"Call to {recipient_label} did not connect within {ring_time}s."
-                    )
-                    retry_allowed = self.config.calling.retry_forever or (
-                        attempts[recipient_label] <= self.config.calling.max_retries
-                    )
-                    if retry_allowed:
-                        if self.config.calling.retry_delay_s > 0:
-                            await asyncio.sleep(self.config.calling.retry_delay_s)
-                        last_error = None
-                        continue
-
-                    failed_recipient = recipient_label
-                    failed.append(recipient_label)
-                    if self.config.calling.failure_action == "stop_batch":
-                        break
-                    break
-
-                if failed_recipient and self.config.calling.failure_action == "stop_batch":
-                    break
-                if index < len(recipients) - 1 and self.config.calling.delay_between_calls_s > 0:
-                    await asyncio.sleep(self.config.calling.delay_between_calls_s)
-
-        final_status = "failed" if failed else "unknown" if unknown else "success"
+        final_status = (
+            "canceled"
+            if canceled
+            else "failed"
+            if failed
+            else "unknown"
+            if unknown
+            else "success"
+        )
         self._last_call_batch = CallBatchDiagnostics(
             status=final_status,
             batch_id=batch_label,
@@ -844,7 +1469,7 @@ class GatewayService:
             failed_recipients=tuple(failed),
             unknown_recipients=tuple(unknown),
             failed_recipient=failed_recipient,
-            last_error=last_error if failed else None,
+            last_error=last_error if failed or canceled else None,
             ring_time_s=ring_time,
             attempts=tuple(attempts.items()),
         )
@@ -872,12 +1497,137 @@ class GatewayService:
         }
 
     async def async_hangup(self) -> dict[str, Any]:
+        canceled_jobs: list[str] = []
+        for queued_id, (kind, cancel_event) in tuple(
+            self._queued_cancel_events.items()
+        ):
+            if kind == "call":
+                cancel_event.set()
+                canceled_jobs.append(queued_id)
+        if self._active_job_kind == "call" and self._active_cancel_event is not None:
+            self._active_cancel_event.set()
+            if self._active_job_id:
+                canceled_jobs.append(self._active_job_id)
         if not self._service_exists(self.disconnect_action):
             raise RuntimeError("Disconnect action is not available.")
-        async with self._transport_job("hangup", "hangup"):
+        await self._execute_user_service(self.disconnect_action)
+        self._mark_disconnect_completed(canceled_jobs)
+        self._dispatch_event(
+            "call_hung_up",
+            {
+                "action": self.disconnect_action,
+                "canceled_jobs": sorted(set(canceled_jobs)),
+            },
+        )
+        return {
+            "status": "success",
+            "canceled": bool(canceled_jobs),
+            "canceled_jobs": sorted(set(canceled_jobs)),
+            "disconnect_sent": True,
+        }
+
+    async def async_send_ussd(self, code: str) -> dict[str, Any]:
+        code = UssdRequest.parse({"code": code}).code
+        service = self.user_services.get(self.send_ussd_action)
+        if service is None:
+            raise RuntimeError(
+                f"ESPHome action '{self.send_ussd_action}' is not available."
+            )
+        argument_names = {argument.name for argument in service.args}
+        argument = next(
+            (name for name in ("code", "ussd", "request") if name in argument_names),
+            None,
+        )
+        if argument is None:
+            raise RuntimeError(
+                f"ESPHome action '{self.send_ussd_action}' has no code/ussd/request argument."
+            )
+        job_id = uuid4().hex[:8]
+        async with self._transport_job("ussd", job_id) as cancel_event:
+            self._raise_if_canceled(cancel_event)
+            await self._execute_user_service(self.send_ussd_action, {argument: code})
+        self._dispatch_event(
+            "ussd_requested",
+            {"job_id": job_id, "action": self.send_ussd_action, "code": code},
+        )
+        return {"job_id": job_id, "status": "accepted"}
+
+    async def async_cancel(self, job_id: str | None = None) -> dict[str, Any]:
+        """Cancel queued/active work immediately and issue disconnect outside the send lock."""
+        canceled_runtime: list[str] = []
+        canceled_call_jobs: list[str] = []
+        cancel_call = False
+        for queued_id, (kind, cancel_event) in tuple(
+            self._queued_cancel_events.items()
+        ):
+            if job_id is None or queued_id == job_id:
+                cancel_event.set()
+                canceled_runtime.append(queued_id)
+                cancel_call = cancel_call or kind == "call"
+                if kind == "call":
+                    canceled_call_jobs.append(queued_id)
+        if self._active_cancel_event is not None and (
+            job_id is None or self._active_job_id == job_id
+        ):
+            self._active_cancel_event.set()
+            cancel_call = cancel_call or self._active_job_kind == "call"
+            if self._active_job_id:
+                canceled_runtime.append(self._active_job_id)
+                if self._active_job_kind == "call":
+                    canceled_call_jobs.append(self._active_job_id)
+
+        # Signal in-memory work before the first database await. In particular,
+        # retain the active call kind so cancellation is guaranteed to issue a
+        # modem disconnect even if the call coroutine unwinds concurrently.
+        pending_rows = await self.store.list_outbox(limit=1000)
+        for row in pending_rows:
+            if (
+                row["kind"] == "sms"
+                and row["status"] not in TERMINAL_OUTBOX_STATES
+                and (job_id is None or row["job_id"] == job_id)
+            ):
+                self._canceled_job_ids.add(row["job_id"])
+
+        canceled_persistent = await self.store.cancel_outbox(
+            job_id, kind=None if job_id else "sms"
+        )
+        self._outbox_depth_cache = await self.store.outbox_depth()
+        self._outbox_changed.set()
+
+        if job_id is not None and not canceled_runtime and canceled_persistent == 0:
+            raise RuntimeError(f"Unknown or already completed job '{job_id}'.")
+
+        disconnected = False
+        if cancel_call and not self._service_exists(self.disconnect_action):
+            if not canceled_runtime:
+                raise RuntimeError("Disconnect action is not available.")
+        elif cancel_call:
+            # Deliberately bypass _transport_job: hangup must preempt retry_forever immediately.
             await self._execute_user_service(self.disconnect_action)
-        self._dispatch_event("call_hung_up", {"action": self.disconnect_action})
-        return {"status": "success"}
+            self._mark_disconnect_completed(canceled_call_jobs)
+            disconnected = True
+        self._dispatch_event(
+            "call_hung_up" if disconnected else "transport_canceled",
+            {
+                "action": self.disconnect_action,
+                "job_id": job_id,
+                "canceled_jobs": sorted(set(canceled_runtime)),
+                "canceled_persistent": canceled_persistent,
+            },
+        )
+        return {
+            "status": "success",
+            "canceled": True,
+            "job_id": job_id,
+            "canceled_jobs": sorted(set(canceled_runtime)),
+            "canceled_persistent": canceled_persistent,
+            "disconnect_sent": disconnected,
+        }
+
+    def _mark_disconnect_completed(self, job_ids: list[str]) -> None:
+        for job_id in job_ids:
+            if job_id == self._active_job_id or job_id in self._queued_cancel_events:
+                self._disconnect_completed_job_ids.add(job_id)
 
     async def _perform_single_call_attempt(
         self,
@@ -887,57 +1637,81 @@ class GatewayService:
         recipient_label: str,
         ring_time_s: int,
         attempt: int,
+        cancel_event: asyncio.Event | None = None,
     ) -> str:
         _LOGGER.info(
             "Call batch %s on %s: dialing %s with action=%s attempt=%s ring_time=%ss",
             batch_id,
             self.host,
-            recipient_label,
+            mask_phone_for_log(recipient),
             self.dial_action,
             attempt,
             ring_time_s,
         )
-        await self._execute_user_service(self.dial_action, {"recipient": recipient})
+        dial_started = False
+        try:
+            dial_started = True
+            await self._execute_user_service(self.dial_action, {"recipient": recipient})
+            self._raise_if_canceled(cancel_event)
 
-        if not self.has_call_state_tracking:
-            await asyncio.sleep(ring_time_s)
+            if not self.has_call_state_tracking:
+                await self._sleep_or_cancel(ring_time_s, cancel_event)
+                await self._execute_user_service(self.disconnect_action)
+                _LOGGER.info(
+                    "Call batch %s on %s: finished dialing %s without call state tracking",
+                    batch_id,
+                    self.host,
+                    mask_phone_for_log(recipient),
+                )
+                return "unknown"
+
+            connected = await self._wait_for_call_connected(ring_time_s, cancel_event)
+            if connected:
+                await self._sleep_or_cancel(ring_time_s, cancel_event)
+                await self._execute_user_service(self.disconnect_action)
+                _LOGGER.info(
+                    "Call batch %s on %s: call with %s connected and was disconnected after %ss",
+                    batch_id,
+                    self.host,
+                    mask_phone_for_log(recipient),
+                    ring_time_s,
+                )
+                return "connected"
+
             await self._execute_user_service(self.disconnect_action)
             _LOGGER.info(
-                "Call batch %s on %s: finished dialing %s without call state tracking",
+                "Call batch %s on %s: call to %s did not connect within %ss",
                 batch_id,
                 self.host,
-                recipient_label,
-            )
-            return "unknown"
-
-        connected = await self._wait_for_call_connected(ring_time_s)
-        if connected:
-            await asyncio.sleep(ring_time_s)
-            await self._execute_user_service(self.disconnect_action)
-            _LOGGER.info(
-                "Call batch %s on %s: call with %s connected and was disconnected after %ss",
-                batch_id,
-                self.host,
-                recipient_label,
+                mask_phone_for_log(recipient),
                 ring_time_s,
             )
-            return "connected"
-
-        await self._execute_user_service(self.disconnect_action)
-        _LOGGER.info(
-            "Call batch %s on %s: call to %s did not connect within %ss",
-            batch_id,
-            self.host,
-            recipient_label,
-            ring_time_s,
-        )
-        return "not_connected"
+            return "not_connected"
+        except asyncio.CancelledError:
+            if (
+                dial_started
+                and batch_id not in self._disconnect_completed_job_ids
+                and self._service_exists(self.disconnect_action)
+            ):
+                try:
+                    await self._execute_user_service(self.disconnect_action)
+                except Exception as err:
+                    _LOGGER.warning(
+                        "Failed to disconnect canceled call batch %s: %s",
+                        batch_id,
+                        err,
+                    )
+            raise
 
     async def _async_on_connect(self) -> None:
         if self._client is None:
             return
         try:
-            device, entities, services = await self._client.device_info_and_list_entities()
+            (
+                device,
+                entities,
+                services,
+            ) = await self._client.device_info_and_list_entities()
             self.device = device
             self.entity_infos = {entity.key: entity for entity in entities}
             self.user_services = {service.name: service for service in services}
@@ -946,6 +1720,7 @@ class GatewayService:
             self.available = True
             self._last_connect_error = None
             self._warmup_until = asyncio.get_running_loop().time() + 5
+            self._outbox_wakeup.set()
             _LOGGER.info("Connected to ESPHome gateway %s:%s", self.host, self.port)
             self._dispatch_event(
                 "availability",
@@ -984,12 +1759,20 @@ class GatewayService:
 
     async def _async_on_connect_error(self, err: Exception) -> None:
         self._last_connect_error = str(err)
-        _LOGGER.warning("ESPHome connect error for %s:%s: %s", self.host, self.port, err)
+        _LOGGER.warning(
+            "ESPHome connect error for %s:%s: %s", self.host, self.port, err
+        )
 
     def _handle_state_callback(self, state: EntityState) -> None:
         role = self.role_for_state_key(state.key)
         self.states[state.key] = state
         self._state_version += 1
+        if role is not None:
+            self._role_versions[role] = self._role_versions.get(role, 0) + 1
+            if role == ROLE_SMS_STATUS:
+                status = (state_as_text(state) or "").strip().lower()
+                if status in {"idle", "queued", "sending", "sent", "failed", "unknown"}:
+                    self._sms_status_results.append((self._role_versions[role], status))
         self._state_event.set()
 
         if role is not None:
@@ -1020,7 +1803,7 @@ class GatewayService:
                 ):
                     _LOGGER.info(
                         "SMS event suppressed for %s due to %ss debounce window",
-                        saved.name if saved else sender,
+                        mask_phone_for_log(sender),
                         SMS_EVENT_DEBOUNCE_S,
                     )
                     return
@@ -1036,11 +1819,10 @@ class GatewayService:
                     "message_search": message_search,
                 }
                 _LOGGER.info(
-                    "SMS event emitted: sender=%s normalized=%s saved_recipient_id=%s message_search=%s",
-                    sender,
-                    sender_key,
+                    "SMS event emitted: sender=%s saved_recipient=%s length=%s",
+                    mask_phone_for_log(sender),
                     payload["saved_recipient_id"],
-                    message_search,
+                    len(message),
                 )
                 self._dispatch_event("sms_received", payload)
         elif role == ROLE_INCOMING_CALL:
@@ -1051,11 +1833,12 @@ class GatewayService:
                 now = time()
                 if (
                     signature == self._last_incoming_call_signature
-                    and now - self._last_incoming_call_event_at < INCOMING_CALL_EVENT_DEBOUNCE_S
+                    and now - self._last_incoming_call_event_at
+                    < INCOMING_CALL_EVENT_DEBOUNCE_S
                 ):
                     _LOGGER.info(
                         "Incoming call event suppressed for %s due to %ss debounce window",
-                        saved.name if saved else caller,
+                        mask_phone_for_log(caller),
                         INCOMING_CALL_EVENT_DEBOUNCE_S,
                     )
                     return
@@ -1069,9 +1852,8 @@ class GatewayService:
                     "saved_recipient_name": saved.name if saved else None,
                 }
                 _LOGGER.info(
-                    "Incoming call event emitted: caller=%s normalized=%s saved_recipient_id=%s",
-                    caller,
-                    signature,
+                    "Incoming call event emitted: caller=%s saved_recipient_id=%s",
+                    mask_phone_for_log(caller),
                     payload["saved_recipient_id"],
                 )
                 self._dispatch_event("incoming_call", payload)
@@ -1086,6 +1868,17 @@ class GatewayService:
             ROLE_INCOMING_CALL: self.config.esphome.incoming_call_object_id,
             ROLE_CALL_STATE: self.config.esphome.call_state_object_id,
             ROLE_USSD: self.config.esphome.ussd_object_id,
+            ROLE_SMS_STATUS: self.config.esphome.sms_status_object_id,
+            ROLE_SMS_LAST_ERROR: self.config.esphome.sms_last_error_object_id,
+            ROLE_SMS_QUEUE_DEPTH: self.config.esphome.sms_queue_depth_object_id,
+            ROLE_SMS_SENT_COUNT: self.config.esphome.sms_sent_count_object_id,
+            ROLE_SMS_FAILED_COUNT: self.config.esphome.sms_failed_count_object_id,
+            ROLE_SMS_UNKNOWN_COUNT: self.config.esphome.sms_unknown_count_object_id,
+            ROLE_SIM800_STATE: self.config.esphome.sim800_state_object_id,
+            ROLE_SIM800_TIMEOUT_COUNT: self.config.esphome.sim800_timeout_count_object_id,
+            ROLE_SIM800_RECOVERY_COUNT: self.config.esphome.sim800_recovery_count_object_id,
+            ROLE_UART_RX_OVERFLOW_COUNT: self.config.esphome.uart_rx_overflow_count_object_id,
+            ROLE_SIM800_LAST_RESPONSE_AGE: self.config.esphome.sim800_last_response_age_object_id,
         }
         detected: dict[str, int] = {}
         for role, aliases in AUTO_DETECT_OBJECT_IDS.items():
@@ -1102,12 +1895,18 @@ class GatewayService:
         override: str | None,
         aliases: tuple[str, ...],
     ) -> EntityInfo | None:
-        if role == ROLE_RSSI:
-            candidates = [entity for entity in entities if isinstance(entity, SensorInfo)]
+        if role in NUMERIC_ROLES:
+            candidates = [
+                entity for entity in entities if isinstance(entity, SensorInfo)
+            ]
         elif role in (ROLE_REGISTERED, ROLE_MODEM_ONLINE):
-            candidates = [entity for entity in entities if isinstance(entity, BinarySensorInfo)]
+            candidates = [
+                entity for entity in entities if isinstance(entity, BinarySensorInfo)
+            ]
         else:
-            candidates = [entity for entity in entities if isinstance(entity, TextSensorInfo)]
+            candidates = [
+                entity for entity in entities if isinstance(entity, TextSensorInfo)
+            ]
 
         normalized_aliases = {normalize_object_id(alias) for alias in aliases}
 

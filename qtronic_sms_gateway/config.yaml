@@ -1,5 +1,5 @@
 name: Q-Tronic SMS Gateway
-version: 0.4.15
+version: 0.5.0
 slug: qtronic_sms_gateway
 description: >-
   GSM gateway for ESPHome-based SIM800C nodes with Ingress UI, REST API,
@@ -42,6 +42,7 @@ options:
     unicode_send_sms_action: send_sms_unicode
     dial_action: dial
     disconnect_action: disconnect
+    send_ussd_action: send_ussd
     rssi_object_id: rssi
     registered_object_id: registered
     modem_online_object_id: modem_online
@@ -50,9 +51,25 @@ options:
     incoming_call_object_id: incoming_call
     call_state_object_id: call_state
     ussd_object_id: ussd
+    sms_status_object_id: sms_status
+    sms_last_error_object_id: sms_last_error
+    sms_queue_depth_object_id: sms_queue_depth
+    sms_sent_count_object_id: sms_sent_count
+    sms_failed_count_object_id: sms_failed_count
+    sms_unknown_count_object_id: sms_unknown_count
+    sim800_timeout_count_object_id: sim800_timeout_count
+    sim800_recovery_count_object_id: sim800_recovery_count
+    uart_rx_overflow_count_object_id: uart_rx_overflow_count
+    sim800_last_response_age_object_id: sim800_last_response_age
+    sim800_state_object_id: sim800_state
   sms:
     default_encoding: auto
     send_delay_ms: 3000
+    max_segments: 10
+    retries: 2
+    retry_backoff_s: 5
+    split_long: false
+    confirmation_timeout_s: 75
   calling:
     default_ring_time_s: 20
     delay_between_calls_s: 5
@@ -69,6 +86,16 @@ options:
     topic_prefix: qtronic_sms_gateway
     discovery_enabled: true
     discovery_prefix: homeassistant
+  security:
+    require_auth: true
+    allow_ingress: true
+    rate_limit_requests: 60
+    rate_limit_window_s: 60
+  history:
+    enabled: true
+    retention_days: 30
+    max_entries: 10000
+    privacy: masked
   recipients: []
 schema:
   esphome:
@@ -79,6 +106,7 @@ schema:
     unicode_send_sms_action: str
     dial_action: str
     disconnect_action: str
+    send_ussd_action: str
     rssi_object_id: str
     registered_object_id: str
     modem_online_object_id: str
@@ -87,9 +115,25 @@ schema:
     incoming_call_object_id: str
     call_state_object_id: str
     ussd_object_id: str
+    sms_status_object_id: str
+    sms_last_error_object_id: str
+    sms_queue_depth_object_id: str
+    sms_sent_count_object_id: str
+    sms_failed_count_object_id: str
+    sms_unknown_count_object_id: str
+    sim800_timeout_count_object_id: str
+    sim800_recovery_count_object_id: str
+    uart_rx_overflow_count_object_id: str
+    sim800_last_response_age_object_id: str
+    sim800_state_object_id: str
   sms:
     default_encoding: "list(auto|passthrough|transliterate|ucs2)"
     send_delay_ms: "int(0,30000)"
+    max_segments: "int(1,100)"
+    retries: "int(0,20)"
+    retry_backoff_s: "int(0,3600)"
+    split_long: bool
+    confirmation_timeout_s: "int(75,300)"
   calling:
     default_ring_time_s: "int(1,3600)"
     delay_between_calls_s: "int(0,300)"
@@ -106,6 +150,16 @@ schema:
     topic_prefix: str
     discovery_enabled: bool
     discovery_prefix: str
+  security:
+    require_auth: bool
+    allow_ingress: bool
+    rate_limit_requests: "int(1,1000)"
+    rate_limit_window_s: "int(1,3600)"
+  history:
+    enabled: bool
+    retention_days: "int(1,3650)"
+    max_entries: "int(100,1000000)"
+    privacy: "list(full|masked|metadata)"
   recipients:
     - id: "str?"
       name: str

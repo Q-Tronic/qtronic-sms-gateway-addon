@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
@@ -14,6 +14,17 @@ from .const import (
     ROLE_RSSI,
     ROLE_SMS_MESSAGE,
     ROLE_SMS_SENDER,
+    ROLE_SMS_LAST_ERROR,
+    ROLE_SMS_QUEUE_DEPTH,
+    ROLE_SMS_SENT_COUNT,
+    ROLE_SMS_FAILED_COUNT,
+    ROLE_SMS_UNKNOWN_COUNT,
+    ROLE_SMS_STATUS,
+    ROLE_SIM800_LAST_RESPONSE_AGE,
+    ROLE_SIM800_RECOVERY_COUNT,
+    ROLE_SIM800_STATE,
+    ROLE_SIM800_TIMEOUT_COUNT,
+    ROLE_UART_RX_OVERFLOW_COUNT,
     ROLE_USSD,
 )
 from .entity import QTronicSmsGatewayEntity
@@ -38,6 +49,7 @@ async def async_setup_entry(
         QTronicSmsGatewayComponentStatusSensor(hub, "sim800"),
         QTronicSmsGatewayLastBatchSensor(hub),
         QTronicSmsGatewayLastCallBatchSensor(hub),
+        QTronicSmsGatewayCommandStatusSensor(hub),
     ]
 
     for role in (
@@ -47,7 +59,11 @@ async def async_setup_entry(
         ROLE_INCOMING_CALL,
         ROLE_CALL_STATE,
         ROLE_USSD,
+        ROLE_SMS_LAST_ERROR,
+        ROLE_SIM800_STATE,
     ):
+        if role in {ROLE_SMS_LAST_ERROR, ROLE_SIM800_STATE} and not hub.has_state_for_role(role):
+            continue
         info = hub.entity_info_for_role(role)
         if info is None:
             continue
@@ -55,6 +71,27 @@ async def async_setup_entry(
             entities.append(QTronicSmsGatewayRssiSensor(hub, info))
         else:
             entities.append(QTronicSmsGatewayTextValueSensor(hub, info, role))
+
+    if hub.has_state_for_role(ROLE_SMS_STATUS):
+        info = hub.entity_info_for_role(ROLE_SMS_STATUS)
+        if info is not None:
+            entities.append(QTronicSmsGatewaySmsStatusSensor(hub, info))
+
+    for role in (
+        ROLE_SMS_QUEUE_DEPTH,
+        ROLE_SMS_SENT_COUNT,
+        ROLE_SMS_FAILED_COUNT,
+        ROLE_SMS_UNKNOWN_COUNT,
+        ROLE_SIM800_TIMEOUT_COUNT,
+        ROLE_SIM800_RECOVERY_COUNT,
+        ROLE_UART_RX_OVERFLOW_COUNT,
+        ROLE_SIM800_LAST_RESPONSE_AGE,
+    ):
+        if not hub.has_state_for_role(role):
+            continue
+        info = hub.entity_info_for_role(role)
+        if info is not None:
+            entities.append(QTronicSmsGatewayDiagnosticNumericSensor(hub, info, role))
 
     async_add_entities(entities)
 
@@ -128,6 +165,102 @@ class QTronicSmsGatewayTextValueSensor(QTronicSmsGatewayEntity, SensorEntity):
     @property
     def native_value(self) -> str | None:
         return state_as_text(self.hub.state_for_role(self._role))
+
+
+class QTronicSmsGatewaySmsStatusSensor(QTronicSmsGatewayTextValueSensor):
+    """Optional firmware-reported SMS pipeline status."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["idle", "queued", "sending", "sent", "failed", "unknown"]
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, hub, info) -> None:
+        super().__init__(hub, info, ROLE_SMS_STATUS)
+
+
+class QTronicSmsGatewayDiagnosticNumericSensor(QTronicSmsGatewayEntity, SensorEntity):
+    """Optional numeric diagnostics reported by newer firmware/backend versions."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, hub, info, role: str) -> None:
+        super().__init__(hub, info)
+        self._role = role
+        self._attr_native_unit_of_measurement = info.unit_of_measurement or None
+        if role == ROLE_SIM800_LAST_RESPONSE_AGE:
+            self._attr_device_class = SensorDeviceClass.DURATION
+        if role in {
+            ROLE_SIM800_TIMEOUT_COUNT,
+            ROLE_SIM800_RECOVERY_COUNT,
+            ROLE_UART_RX_OVERFLOW_COUNT,
+            ROLE_SMS_SENT_COUNT,
+            ROLE_SMS_FAILED_COUNT,
+            ROLE_SMS_UNKNOWN_COUNT,
+        }:
+            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+        else:
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> float | None:
+        return state_as_float(self.hub.state_for_role(self._role))
+
+
+class QTronicSmsGatewayCommandStatusSensor(SensorEntity):
+    """Expose last SMS-rule outcome and cumulative counters."""
+
+    _attr_has_entity_name = True
+    _attr_name = "SMS Command Status"
+    _attr_icon = "mdi:message-lock"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = [
+        "idle",
+        "success",
+        "failed",
+        "rate_limited",
+        "auth_failed",
+        "locked",
+        "challenge_pending",
+    ]
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_should_poll = False
+
+    def __init__(self, hub: QTronicSmsGatewayHub) -> None:
+        self.hub = hub
+        self._attr_unique_id = f"{hub.unique_id_prefix}_sms_command_status"
+        self._remove_listener = None
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def device_info(self):
+        return self.hub.ha_device_info
+
+    @property
+    def _statistics(self) -> dict[str, object]:
+        engine = getattr(self.hub, "sms_command_engine", None)
+        return engine.statistics if engine is not None else {"status": "idle"}
+
+    @property
+    def native_value(self) -> str:
+        return str(self._statistics.get("status", "idle"))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        return self._statistics
+
+    async def async_added_to_hass(self) -> None:
+        self._remove_listener = self.hub.async_add_listener(self._handle_hub_update)
+
+    async def async_will_remove_from_hass(self) -> None:
+        if self._remove_listener is not None:
+            self._remove_listener()
+            self._remove_listener = None
+
+    def _handle_hub_update(self) -> None:
+        self.async_write_ha_state()
 
 
 class QTronicSmsGatewayLastBatchSensor(SensorEntity):

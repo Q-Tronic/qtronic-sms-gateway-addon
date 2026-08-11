@@ -24,6 +24,9 @@ configuration:
       disconnect_action:
         name: Akcja rozłączenia
         description: Nazwa akcji ESPHome do rozłączenia połączenia.
+      send_ussd_action:
+        name: Akcja USSD
+        description: Nazwa akcji ESPHome do wysyłania kodów USSD.
       rssi_object_id:
         name: Object ID RSSI
         description: Object ID używany do wykrywania sensora RSSI.
@@ -48,6 +51,39 @@ configuration:
       ussd_object_id:
         name: Object ID USSD
         description: Object ID używany do wykrywania wiadomości USSD.
+      sms_status_object_id:
+        name: Object ID statusu SMS
+        description: Object ID wyniku kolejki SMS, np. queued, sent, failed lub unknown.
+      sms_last_error_object_id:
+        name: Object ID ostatniego błędu SMS
+        description: Object ID tekstu z ostatnim błędem transportu SMS.
+      sms_queue_depth_object_id:
+        name: Object ID długości kolejki SMS
+        description: Object ID liczby wiadomości oczekujących lub wysyłanych.
+      sms_sent_count_object_id:
+        name: Object ID wysłanych SMS-ów
+        description: Object ID licznika SMS-ów potwierdzonych przez modem.
+      sms_failed_count_object_id:
+        name: Object ID błędnych SMS-ów
+        description: Object ID licznika jednoznacznie nieudanych wysyłek SMS.
+      sms_unknown_count_object_id:
+        name: Object ID SMS-ów o nieznanym wyniku
+        description: Object ID licznika wysyłek bez jednoznacznego wyniku po przekazaniu treści modemowi.
+      sim800_timeout_count_object_id:
+        name: Object ID timeoutów SIM800
+        description: Object ID licznika przekroczeń czasu odpowiedzi komend modemu.
+      sim800_recovery_count_object_id:
+        name: Object ID odzyskiwania SIM800
+        description: Object ID licznika kontrolowanych prób odzyskania maszyny stanów modemu.
+      uart_rx_overflow_count_object_id:
+        name: Object ID błędów UART RX
+        description: Object ID licznika przepełnień i błędów odbioru UART.
+      sim800_last_response_age_object_id:
+        name: Object ID wieku odpowiedzi SIM800
+        description: Object ID czasu od ostatniej poprawnej odpowiedzi modemu w sekundach.
+      sim800_state_object_id:
+        name: Object ID stanu SIM800
+        description: Object ID bieżącego stanu wewnętrznej maszyny transportu modemu.
   sms:
     name: Ustawienia SMS
     description: Skonfiguruj sposób wysyłki wiadomości SMS.
@@ -58,6 +94,21 @@ configuration:
       send_delay_ms:
         name: Odstęp między SMS-ami [ms]
         description: Opóźnienie przy wysyłce wielu SMS-ów w jednym batchu.
+      max_segments:
+        name: Maksymalna liczba segmentów
+        description: Maksymalna liczba części jednej wiadomości przed jej odrzuceniem.
+      retries:
+        name: Ponowienia wysyłki SMS
+        description: Ile razy ponowić wysyłkę po jednoznacznym błędzie modemu.
+      retry_backoff_s:
+        name: Odstęp ponowień SMS [s]
+        description: Czas oczekiwania przed kolejną próbą wysłania wiadomości.
+      split_long:
+        name: Dziel długie wiadomości
+        description: Zezwól na podział wiadomości przekraczającej pojedynczy segment GSM-7 lub UCS2.
+      confirmation_timeout_s:
+        name: Timeout potwierdzenia modemu [s]
+        description: Maksymalny czas oczekiwania na końcowy wynik wysyłki z SIM800C; minimum 75 s odpowiada deadline firmware.
   calling:
     name: Ustawienia połączeń
     description: Skonfiguruj połączenia wychodzące i politykę ponowień.
@@ -108,6 +159,38 @@ configuration:
       discovery_prefix:
         name: Prefiks discovery
         description: Prefiks discovery MQTT dla Home Assistant.
+  security:
+    name: Bezpieczeństwo API
+    description: Skonfiguruj uwierzytelnianie i ograniczenie liczby żądań do bramki.
+    fields:
+      require_auth:
+        name: Wymagaj autoryzacji API
+        description: Wymagaj automatycznie wygenerowanego tokenu Bearer poza zaufanym Ingress.
+      allow_ingress:
+        name: Zezwól na Ingress
+        description: Zezwól uwierzytelnionemu proxy Home Assistant na dostęp do dashboardu i API.
+      rate_limit_requests:
+        name: Limit żądań
+        description: Maksymalna liczba żądań jednego klienta w skonfigurowanym oknie czasu.
+      rate_limit_window_s:
+        name: Okno limitu [s]
+        description: Długość okna używanego do ograniczania liczby żądań.
+  history:
+    name: Historia i audyt
+    description: Skonfiguruj trwałą historię operacji SMS, połączeń, poleceń i błędów.
+    fields:
+      enabled:
+        name: Włącz historię
+        description: Zapisuj zdarzenia w trwałej bazie dodatku.
+      retention_days:
+        name: Retencja [dni]
+        description: Po ilu dniach automatycznie usuwać stare wpisy.
+      max_entries:
+        name: Maksymalna liczba wpisów
+        description: Górny limit liczby zachowanych zdarzeń audytowych.
+      privacy:
+        name: Poziom prywatności
+        description: Zapisuj pełne dane, dane zamaskowane albo wyłącznie metadane.
   recipients:
     name: Odbiorcy zapisani
     description: Zdefiniuj nazwanych odbiorców do SMS-ów i połączeń.

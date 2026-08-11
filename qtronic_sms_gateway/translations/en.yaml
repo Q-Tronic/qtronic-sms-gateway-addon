@@ -24,6 +24,9 @@ configuration:
       disconnect_action:
         name: Disconnect action
         description: ESPHome action name for hanging up a call.
+      send_ussd_action:
+        name: USSD action
+        description: ESPHome action name used to send USSD codes.
       rssi_object_id:
         name: RSSI object ID
         description: Object ID used to detect the RSSI sensor.
@@ -48,6 +51,39 @@ configuration:
       ussd_object_id:
         name: USSD object ID
         description: Object ID used to detect USSD messages.
+      sms_status_object_id:
+        name: SMS status object ID
+        description: Object ID reporting queued, sent, failed, or unknown SMS results.
+      sms_last_error_object_id:
+        name: SMS last error object ID
+        description: Object ID containing the latest SMS transport error.
+      sms_queue_depth_object_id:
+        name: SMS queue depth object ID
+        description: Object ID reporting queued and active SMS messages.
+      sms_sent_count_object_id:
+        name: SMS sent count object ID
+        description: Object ID counting messages confirmed by the modem.
+      sms_failed_count_object_id:
+        name: SMS failed count object ID
+        description: Object ID counting definitively failed SMS submissions.
+      sms_unknown_count_object_id:
+        name: SMS unknown count object ID
+        description: Object ID counting submissions with an ambiguous final result.
+      sim800_timeout_count_object_id:
+        name: SIM800 timeout count object ID
+        description: Object ID counting modem command timeouts.
+      sim800_recovery_count_object_id:
+        name: SIM800 recovery count object ID
+        description: Object ID counting controlled modem state-machine recoveries.
+      uart_rx_overflow_count_object_id:
+        name: UART RX error count object ID
+        description: Object ID counting UART receive overflows and read errors.
+      sim800_last_response_age_object_id:
+        name: SIM800 response age object ID
+        description: Object ID reporting seconds since the last valid modem response.
+      sim800_state_object_id:
+        name: SIM800 state object ID
+        description: Object ID reporting the current modem transport state.
   sms:
     name: SMS settings
     description: Configure outgoing SMS behavior.
@@ -58,6 +94,21 @@ configuration:
       send_delay_ms:
         name: Delay between SMS messages [ms]
         description: Delay used when sending multiple SMS messages in one batch.
+      max_segments:
+        name: Maximum segment count
+        description: Maximum number of message parts accepted before rejecting an outgoing message.
+      retries:
+        name: SMS retries
+        description: Number of retries after an unambiguous modem failure.
+      retry_backoff_s:
+        name: SMS retry delay [s]
+        description: Delay before another attempt to send a message.
+      split_long:
+        name: Split long messages
+        description: Allow messages longer than one GSM-7 or UCS2 segment to be split.
+      confirmation_timeout_s:
+        name: Modem confirmation timeout [s]
+        description: Maximum wait for the final SIM800C send result; the 75 s minimum covers the firmware deadline.
   calling:
     name: Call settings
     description: Configure outbound call behavior and retry policy.
@@ -108,6 +159,38 @@ configuration:
       discovery_prefix:
         name: Discovery prefix
         description: Home Assistant MQTT discovery prefix.
+  security:
+    name: API security
+    description: Configure gateway authentication and request rate limiting.
+    fields:
+      require_auth:
+        name: Require API authentication
+        description: Require the automatically generated Bearer token outside trusted Ingress.
+      allow_ingress:
+        name: Allow Ingress
+        description: Allow the authenticated Home Assistant proxy to access the dashboard and API.
+      rate_limit_requests:
+        name: Request limit
+        description: Maximum number of requests from one client in the configured time window.
+      rate_limit_window_s:
+        name: Rate-limit window [s]
+        description: Window length used for request rate limiting.
+  history:
+    name: History and audit
+    description: Configure persistent history for SMS, calls, commands, and failures.
+    fields:
+      enabled:
+        name: Enable history
+        description: Store events in the add-on persistent database.
+      retention_days:
+        name: Retention [days]
+        description: Automatically remove entries older than this number of days.
+      max_entries:
+        name: Maximum entries
+        description: Upper limit for retained audit events.
+      privacy:
+        name: Privacy level
+        description: Store full data, masked data, or metadata only.
   recipients:
     name: Saved recipients
     description: Define named recipients for SMS and call commands.

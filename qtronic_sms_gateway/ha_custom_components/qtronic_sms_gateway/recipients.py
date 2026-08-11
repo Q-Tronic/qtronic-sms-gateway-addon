@@ -9,7 +9,13 @@ from typing import Any
 
 from homeassistant.helpers.selector import SelectOptionDict
 
-from .const import RECIPIENT_ID, RECIPIENT_NAME, RECIPIENT_PHONE
+from .const import (
+    RECIPIENT_ID,
+    RECIPIENT_NAME,
+    RECIPIENT_PHONE,
+    RECIPIENT_PIN_HASH,
+    RECIPIENT_PIN_REQUIRED,
+)
 
 _NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
 _PHONE_ALLOWED_RE = re.compile(r"[^0-9+]")
@@ -23,6 +29,8 @@ class SavedRecipient:
     id: str
     name: str
     phone: str
+    pin_hash: str = ""
+    pin_required: bool = False
 
     def as_dict(self) -> dict[str, str]:
         """Serialize to config-entry-safe dict."""
@@ -108,6 +116,8 @@ def load_saved_recipients(raw_value: Any) -> tuple[SavedRecipient, ...]:
             continue
         name = item.get(RECIPIENT_NAME)
         phone = item.get(RECIPIENT_PHONE)
+        pin_hash = item.get(RECIPIENT_PIN_HASH, "")
+        pin_required = bool(item.get(RECIPIENT_PIN_REQUIRED, pin_hash))
         recipient_id = item.get(RECIPIENT_ID)
         if not isinstance(name, str) or not isinstance(phone, str):
             continue
@@ -124,7 +134,15 @@ def load_saved_recipients(raw_value: Any) -> tuple[SavedRecipient, ...]:
             recipient_id = make_recipient_id(clean_name, seen_ids)
 
         seen_ids.add(recipient_id)
-        recipients.append(SavedRecipient(id=recipient_id, name=clean_name, phone=clean_phone))
+        recipients.append(
+            SavedRecipient(
+                id=recipient_id,
+                name=clean_name,
+                phone=clean_phone,
+                pin_hash=str(pin_hash) if isinstance(pin_hash, str) else "",
+                pin_required=pin_required,
+            )
+        )
 
     return tuple(recipients)
 
@@ -132,6 +150,34 @@ def load_saved_recipients(raw_value: Any) -> tuple[SavedRecipient, ...]:
 def serialize_saved_recipients(recipients: tuple[SavedRecipient, ...] | list[SavedRecipient]) -> list[dict[str, str]]:
     """Serialize saved recipients for config entry options."""
     return [recipient.as_dict() for recipient in recipients]
+
+
+def merge_saved_recipients(
+    configured: tuple[SavedRecipient, ...] | list[SavedRecipient],
+    backend: tuple[SavedRecipient, ...] | list[SavedRecipient],
+) -> tuple[SavedRecipient, ...]:
+    """Merge integration and add-on contacts without silently dropping either source.
+
+    Integration-owned records win conflicts because they may carry a PIN hash that the
+    add-on intentionally never returns. Backend-only contacts are appended in their
+    original order.
+    """
+    merged = list(configured)
+    ids = {item.id for item in merged}
+    for item in backend:
+        duplicate_index = next(
+            (
+                index
+                for index, existing in enumerate(merged)
+                if phone_numbers_match(existing.phone, item.phone)
+            ),
+            None,
+        )
+        if item.id in ids or duplicate_index is not None:
+            continue
+        merged.append(item)
+        ids.add(item.id)
+    return tuple(merged)
 
 
 def recipient_select_options(

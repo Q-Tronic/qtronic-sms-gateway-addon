@@ -5,12 +5,19 @@ from __future__ import annotations
 from homeassistant.const import CONF_HOST
 from homeassistant.core import Event
 
-from .const import EVENT_ATTR_ADDON_HOSTNAME, EVENT_ATTR_GATEWAY_HOST
+from .const import (
+    EVENT_ATTR_ADDON_HOSTNAME,
+    EVENT_ATTR_CONFIG_ENTRY_ID,
+    EVENT_ATTR_GATEWAY_HOST,
+)
 from .hub import QTronicSmsGatewayHub
 
 
 def event_belongs_to_hub(event: Event, hub: QTronicSmsGatewayHub) -> bool:
     """Return whether an add-on event belongs to this gateway hub."""
+    event_entry_id = str(event.data.get(EVENT_ATTR_CONFIG_ENTRY_ID, ""))
+    if event_entry_id:
+        return event_entry_id == hub.entry.entry_id
     event_gateway_host = str(event.data.get(EVENT_ATTR_GATEWAY_HOST, "")).lower()
     if event_gateway_host:
         return event_gateway_host == hub.gateway_host.lower()

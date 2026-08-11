@@ -10,7 +10,7 @@ import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
@@ -18,19 +18,24 @@ from homeassistant.helpers import entity_registry as er
 
 from .const import (
     ATTR_ENCODING,
+    ATTR_BATCH_ID,
     ATTR_MESSAGE,
     ATTR_RECIPIENT,
     ATTR_RING_TIME_S,
     ATTR_SAVED_RECIPIENTS,
+    ATTR_USSD_CODE,
     CONF_CONFIG_ENTRY_ID,
     DOMAIN,
     SERVICE_CALL_TO,
+    SERVICE_CANCEL_BATCH,
+    SERVICE_HANGUP,
     SERVICE_SEND_SMS,
+    SERVICE_SEND_USSD,
     SMS_ENCODINGS,
 )
 from .forwarding import InboundForwardingEngine
 from .hub import GatewayAuthenticationError, GatewayConnectionError, QTronicSmsGatewayHub
-from .recipients import deduplicate_phone_numbers, mask_phone_number
+from .recipients import deduplicate_phone_numbers, mask_phone_number, normalize_phone_number
 from .restart_issue import async_sync_restart_issue
 from .sms_commands import SmsCommandRuleEngine
 
@@ -58,6 +63,22 @@ CALL_TO_SCHEMA = vol.Schema(
         vol.Optional(ATTR_SAVED_RECIPIENTS): cv.entity_ids,
         vol.Optional(ATTR_RING_TIME_S): vol.All(vol.Coerce(int), vol.Range(min=1, max=3600)),
         vol.Optional(CONF_CONFIG_ENTRY_ID): cv.string,
+    }
+)
+
+GATEWAY_ACTION_SCHEMA = vol.Schema(
+    {vol.Optional(CONF_CONFIG_ENTRY_ID): cv.string}
+)
+
+CANCEL_BATCH_SCHEMA = GATEWAY_ACTION_SCHEMA.extend(
+    {vol.Optional(ATTR_BATCH_ID): cv.string}
+)
+
+SEND_USSD_SCHEMA = GATEWAY_ACTION_SCHEMA.extend(
+    {
+        vol.Required(ATTR_USSD_CODE): vol.All(
+            cv.string, vol.Match(r"^[0-9*#]{1,32}$")
+        )
     }
 )
 
@@ -128,7 +149,12 @@ def _resolve_targets_for_service(
 ) -> list[tuple[QTronicSmsGatewayHub, list[str]]]:
     """Resolve saved/manual recipients to concrete per-gateway phone number lists."""
     def _validated_numbers(numbers: list[str]) -> list[str]:
-        resolved = deduplicate_phone_numbers(numbers)
+        try:
+            resolved = deduplicate_phone_numbers(
+                [normalize_phone_number(number) for number in numbers if number]
+            )
+        except ValueError as err:
+            raise HomeAssistantError(str(err)) from err
         if resolved:
             return resolved
         raise HomeAssistantError(
@@ -204,6 +230,30 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             _make_call_to_handler(hass),
             schema=CALL_TO_SCHEMA,
         )
+    if not hass.services.has_service(DOMAIN, SERVICE_HANGUP):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_HANGUP,
+            _make_gateway_action_handler(hass, SERVICE_HANGUP),
+            schema=GATEWAY_ACTION_SCHEMA,
+            supports_response=SupportsResponse.OPTIONAL,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_CANCEL_BATCH):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_CANCEL_BATCH,
+            _make_gateway_action_handler(hass, SERVICE_CANCEL_BATCH),
+            schema=CANCEL_BATCH_SCHEMA,
+            supports_response=SupportsResponse.OPTIONAL,
+        )
+    if not hass.services.has_service(DOMAIN, SERVICE_SEND_USSD):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SEND_USSD,
+            _make_gateway_action_handler(hass, SERVICE_SEND_USSD),
+            schema=SEND_USSD_SCHEMA,
+            supports_response=SupportsResponse.OPTIONAL,
+        )
     return True
 
 
@@ -230,6 +280,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         name=entry.title or "Q-Tronic SMS Gateway",
     )
 
+    command_engine = SmsCommandRuleEngine(hass, hub)
+    hub.sms_command_engine = command_engine
+
     try:
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     except Exception:
@@ -237,9 +290,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await hub.async_stop()
         raise
 
-    command_engine = SmsCommandRuleEngine(hass, hub)
     await command_engine.async_start()
-    hub.sms_command_engine = command_engine
     forwarding_engine = InboundForwardingEngine(hass, hub)
     await forwarding_engine.async_start()
     hub.inbound_forwarding_engine = forwarding_engine
@@ -359,3 +410,40 @@ def _make_call_to_handler(hass: HomeAssistant):
             )
 
     return _handle_call_to
+
+
+def _resolve_action_hub(
+    entries: dict[str, QTronicSmsGatewayHub], entry_id: str | None
+) -> QTronicSmsGatewayHub:
+    """Resolve one gateway for a non-recipient action."""
+    if entry_id:
+        hub = entries.get(entry_id)
+        if hub is None:
+            raise HomeAssistantError(f"Config entry '{entry_id}' was not found.")
+        return hub
+    if len(entries) != 1:
+        raise HomeAssistantError(
+            "Multiple Q-Tronic SMS Gateway entries are configured. Provide config_entry_id."
+        )
+    return next(iter(entries.values()))
+
+
+def _make_gateway_action_handler(hass: HomeAssistant, action: str):
+    async def _handle(call: ServiceCall) -> dict[str, object] | None:
+        hub = _resolve_action_hub(
+            _get_entries(hass), call.data.get(CONF_CONFIG_ENTRY_ID)
+        )
+        if action == SERVICE_HANGUP:
+            response = await hub.async_hangup()
+        elif action == SERVICE_CANCEL_BATCH:
+            response = await hub.async_cancel_batch(call.data.get(ATTR_BATCH_ID))
+        elif action == SERVICE_SEND_USSD:
+            response = await hub.async_send_ussd(call.data[ATTR_USSD_CODE])
+        else:
+            raise HomeAssistantError(f"Unsupported gateway action '{action}'.")
+
+        # SupportsResponse.OPTIONAL requires returning data only when the caller
+        # explicitly requested a response (for example from Developer Tools).
+        return response if call.return_response else None
+
+    return _handle

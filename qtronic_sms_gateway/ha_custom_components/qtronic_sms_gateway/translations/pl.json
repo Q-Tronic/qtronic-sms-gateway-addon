@@ -19,8 +19,8 @@
       }
     },
     "error": {
-      "cannot_connect": "Nie udało się połączyć z urządzeniem ESPHome.",
-      "invalid_auth": "Klucz szyfrowania API ESPHome jest nieprawidłowy."
+      "cannot_connect": "Nie udało się połączyć z backendem add-onu Q-Tronic.",
+      "invalid_auth": "Token API add-onu jest niedostępny lub nieprawidłowy. Uruchom ponownie add-on, aby odtworzyć plik tokenu."
     },
     "abort": {
       "already_configured": "Ta integracja Q-Tronic SMS Gateway jest już skonfigurowana.",
@@ -33,7 +33,7 @@
         "title": "Opcje Q-Tronic SMS Gateway",
         "description": "Wybierz sekcję do konfiguracji. Zapisani odbiorcy: {recipient_count}. Reguły SMS: {rule_count}.",
         "menu_options": {
-          "connection": "Połączenie z ESPHome",
+          "connection": "Połączenie z backendem add-onu",
           "messaging": "Wysyłka SMS",
           "calling": "Połączenia",
           "recipients": "Odbiorcy zapisani",
@@ -92,7 +92,9 @@
         "description": "Dodaj nowego zapisanego odbiorcę SMS.",
         "data": {
           "recipient_name": "Nazwa użytkownika",
-          "recipient_phone": "Numer telefonu"
+          "recipient_phone": "Numer telefonu",
+          "pin_required": "Wymagaj PIN-u dla poleceń tego kontaktu",
+          "recipient_pin": "Opcjonalny PIN SMS (4–12 cyfr)"
         }
       },
       "edit_recipient_select": {
@@ -107,7 +109,9 @@
         "description": "Zmień nazwę lub numer telefonu wybranego odbiorcy.",
         "data": {
           "recipient_name": "Nazwa użytkownika",
-          "recipient_phone": "Numer telefonu"
+          "recipient_phone": "Numer telefonu",
+          "pin_required": "Wymagaj PIN-u dla poleceń tego kontaktu",
+          "recipient_pin": "Nowy PIN SMS; puste pole zachowuje obecny"
         }
       },
       "delete_recipients": {
@@ -133,17 +137,22 @@
       },
       "sms_commands": {
         "title": "Polecenia i odpowiedzi SMS",
-        "description": "Skonfiguruj sterowanie encjami oraz odczytywanie ich stanu przez SMS. Pierwsza pasująca reguła zostanie wykonana.\n\nAktualne reguły:\n{rules}",
+        "description": "Skonfiguruj bezpieczne sterowanie i odczyty przez SMS. Reguły są sprawdzane według priorytetu. Wykryte możliwe kolizje: {collision_count}.\n\nAktualne reguły:\n{rules}",
         "menu_options": {
           "add_sms_rule": "Dodaj regułę SMS",
           "edit_sms_rule_select": "Edytuj regułę SMS",
           "delete_sms_rules": "Usuń reguły SMS",
+          "reorder_sms_rules": "Zmień kolejność reguł",
+          "test_sms_rule": "Tester reguł (dry-run)",
+          "sms_security": "Limity i blokady bezpieczeństwa",
+          "export_sms_configuration": "Eksportuj reguły i kontakty",
+          "import_sms_configuration": "Importuj reguły i kontakty",
           "init": "Wróć do menu głównego"
         }
       },
       "add_sms_rule": {
         "title": "Dodaj regułę SMS",
-        "description": "Wiadomość może zawierać wiele słów. Polskie znaki, wielkość liter i nadmiarowe spacje są ignorowane. Wyszukaj encję po jej nazwie lub entity_id.\n\nZmienne szablonów odpowiedzi:\n\n- `{data_czas}` — data i czas rozpoczęcia wysyłania odpowiedzi w lokalnej strefie Home Assistanta\n- `{zmienna}` — surowa wartość encji, np. `23.4`, `on` albo `off`\n- `{stan}` — czytelny stan encji, np. `otwarta`, `włączony` albo `23.4`\n- `{jednostka}` — jednostka pomiaru, np. `°C`; pusta, jeśli encja jej nie ma\n- `{nazwa_encji}` — przyjazna nazwa encji lub jej identyfikator\n- `{entity_id}` — pełny identyfikator encji, np. `sensor.temperatura_salon`\n- `{nadawca}` — nazwa zapisanego użytkownika lub zamaskowany numer telefonu\n- `{komenda}` — oryginalna treść odebranego polecenia SMS\n\nPrzykład:\n\n```text\n{data_czas}\nTemperatura w salonie: {stan} {jednostka}\n```",
+        "description": "Polskie znaki, wielkość liter i nadmiarowe spacje są ignorowane. `{value}` przechwytuje parametr, np. wzorzec `ustaw salon {value}` przyjmie SMS `ustaw salon 22`. Jeśli ustawiono PIN, format to `<polecenie> <PIN>`, np. `ustaw salon 22 1234`. Przy challenge odpowiedz dokładnie `POTWIERDZ 123456` kodem z wiadomości; kod jest jednorazowy. PIN nie jest zapisywany jawnie. Puste pole PIN podczas edycji zachowuje obecny hash. Skrypt jest bezpiecznym kontenerem dla własnej sekwencji.\n\nZmienne odpowiedzi:\n`{data_czas}` – data i czas z chwili wysyłania odpowiedzi.\n`{zmienna}` – surowy stan encji.\n`{stan}` – stan encji opisany po polsku.\n`{jednostka}` – jednostka stanu encji.\n`{nazwa_encji}` – przyjazna nazwa encji.\n`{entity_id}` – identyfikator encji.\n`{nadawca}` – nazwa zapisanego nadawcy albo zamaskowany numer.\n`{komenda}` – odebrana treść polecenia.\n`{value}` – parametr przechwycony z komendy.\n`{wynik}` – zbiorczy opis stanów wszystkich wybranych encji.\n`{liczba_encji}` – liczba obsłużonych encji.",
         "data": {
           "name": "Nazwa reguły",
           "enabled": "Reguła włączona",
@@ -152,8 +161,19 @@
           "sender_phone": "Ręcznie wpisany numer telefonu",
           "command": "Treść polecenia SMS",
           "match_mode": "Sposób dopasowania wiadomości",
-          "entity_id": "Encja Home Assistant",
+          "entity_id": "Encje Home Assistant (jedna lub wiele)",
           "action": "Operacja",
+          "priority": "Priorytet (wyższy jest sprawdzany wcześniej)",
+          "cooldown_s": "Cooldown reguły dla nadawcy [s]",
+          "pin_required": "Wymagaj PIN-u dla tej reguły",
+          "pin": "Opcjonalny PIN reguły; pusty zachowuje obecny",
+          "challenge_required": "Wymagaj drugiego SMS-a z jednorazowym kodem",
+          "challenge_ttl_s": "Ważność kodu challenge [s]",
+          "condition_after": "Dozwolone od godziny HH:MM",
+          "condition_before": "Dozwolone do godziny HH:MM",
+          "condition_entity_id": "Opcjonalna encja warunku",
+          "condition_state": "Wymagany stan encji warunku",
+          "service_data": "Opcjonalne bezpieczne dane usługi (JSON; bez entity_id)",
           "reply_enabled": "Wyślij odpowiedź po sukcesie (odczyt stanu zawsze odpowiada)",
           "success_reply": "Szablon odpowiedzi po sukcesie lub odczycie",
           "failure_reply": "Opcjonalny szablon odpowiedzi po błędzie"
@@ -167,7 +187,7 @@
       },
       "edit_sms_rule": {
         "title": "Edytuj regułę SMS",
-        "description": "Zmień nadawcę, wielowyrazową komendę, encję, operację lub szablony odpowiedzi.\n\nZmienne szablonów odpowiedzi:\n\n- `{data_czas}` — data i czas rozpoczęcia wysyłania odpowiedzi w lokalnej strefie Home Assistanta\n- `{zmienna}` — surowa wartość encji, np. `23.4`, `on` albo `off`\n- `{stan}` — czytelny stan encji, np. `otwarta`, `włączony` albo `23.4`\n- `{jednostka}` — jednostka pomiaru, np. `°C`; pusta, jeśli encja jej nie ma\n- `{nazwa_encji}` — przyjazna nazwa encji lub jej identyfikator\n- `{entity_id}` — pełny identyfikator encji, np. `sensor.temperatura_salon`\n- `{nadawca}` — nazwa zapisanego użytkownika lub zamaskowany numer telefonu\n- `{komenda}` — oryginalna treść odebranego polecenia SMS\n\nPrzykład:\n\n```text\n{data_czas}\nTemperatura w salonie: {stan} {jednostka}\n```",
+        "description": "Zmień nadawcę, komendę, encje, operację, warunki i ochronę. PIN: `<polecenie> <PIN>`. Challenge: `POTWIERDZ <kod>`. Puste pole PIN zachowuje obecny hash. `{value}` przechwytuje parametr.\n\nZmienne odpowiedzi:\n`{data_czas}` – data i czas z chwili wysyłania odpowiedzi.\n`{zmienna}` – surowy stan encji.\n`{stan}` – stan encji opisany po polsku.\n`{jednostka}` – jednostka stanu encji.\n`{nazwa_encji}` – przyjazna nazwa encji.\n`{entity_id}` – identyfikator encji.\n`{nadawca}` – nazwa zapisanego nadawcy albo zamaskowany numer.\n`{komenda}` – odebrana treść polecenia.\n`{value}` – parametr przechwycony z komendy.\n`{wynik}` – zbiorczy opis stanów wszystkich wybranych encji.\n`{liczba_encji}` – liczba obsłużonych encji.",
         "data": {
           "name": "Nazwa reguły",
           "enabled": "Reguła włączona",
@@ -176,8 +196,19 @@
           "sender_phone": "Ręcznie wpisany numer telefonu",
           "command": "Treść polecenia SMS",
           "match_mode": "Sposób dopasowania wiadomości",
-          "entity_id": "Encja Home Assistant",
+          "entity_id": "Encje Home Assistant (jedna lub wiele)",
           "action": "Operacja",
+          "priority": "Priorytet (wyższy jest sprawdzany wcześniej)",
+          "cooldown_s": "Cooldown reguły dla nadawcy [s]",
+          "pin_required": "Wymagaj PIN-u dla tej reguły",
+          "pin": "Nowy PIN reguły; pusty zachowuje obecny",
+          "challenge_required": "Wymagaj drugiego SMS-a z jednorazowym kodem",
+          "challenge_ttl_s": "Ważność kodu challenge [s]",
+          "condition_after": "Dozwolone od godziny HH:MM",
+          "condition_before": "Dozwolone do godziny HH:MM",
+          "condition_entity_id": "Opcjonalna encja warunku",
+          "condition_state": "Wymagany stan encji warunku",
+          "service_data": "Opcjonalne bezpieczne dane usługi (JSON; bez entity_id)",
           "reply_enabled": "Wyślij odpowiedź po sukcesie (odczyt stanu zawsze odpowiada)",
           "success_reply": "Szablon odpowiedzi po sukcesie lub odczycie",
           "failure_reply": "Opcjonalny szablon odpowiedzi po błędzie"
@@ -189,6 +220,37 @@
         "data": {
           "sms_rule_id": "Reguły SMS"
         }
+      },
+      "reorder_sms_rules": {
+        "title": "Zmień kolejność reguł SMS",
+        "description": "Przesuń regułę. Integracja zapisze jawne priorytety, aby kolejność była stabilna.",
+        "data": {"sms_rule_id": "Reguła", "sms_rule_direction": "Kierunek"}
+      },
+      "test_sms_rule": {
+        "title": "Tester reguł SMS (dry-run)",
+        "description": "{result}\n\nTester tylko dopasowuje regułę. Nie wywołuje usług i nie zmienia żadnej encji.",
+        "data": {"sms_rule_test_sender": "Numer nadawcy", "sms_rule_test_message": "Treść testowego SMS-a"}
+      },
+      "sms_security": {
+        "title": "Bezpieczeństwo poleceń SMS",
+        "description": "Limity dotyczą wyłącznie wiadomości pasujących do autoryzowanego nadawcy/reguły. Wielokrotne błędne PIN-y powodują czasową blokadę nadawcy.",
+        "data": {
+          "sms_security_global_limit": "Globalny limit prób w oknie",
+          "sms_security_sender_limit": "Limit prób jednego nadawcy w oknie",
+          "sms_security_window_s": "Długość okna [s]",
+          "sms_security_pin_failure_limit": "Błędne PIN-y przed blokadą",
+          "sms_security_lockout_s": "Czas blokady [s]"
+        }
+      },
+      "export_sms_configuration": {
+        "title": "Eksport reguł i kontaktów",
+        "description": "Skopiuj JSON. PIN-y są eksportowane wyłącznie jako solone hashe PBKDF2; traktuj plik jako poufny.",
+        "data": {"import_export_payload": "JSON eksportu"}
+      },
+      "import_sms_configuration": {
+        "title": "Import reguł i kontaktów",
+        "description": "Wklej JSON utworzony przez eksport. Poprawne dane zastąpią lokalne kontakty, reguły i limity.",
+        "data": {"import_export_payload": "JSON importu"}
       },
       "entity_mapping": {
         "title": "Mapowanie encji",
@@ -206,16 +268,22 @@
       }
     },
     "error": {
-      "cannot_connect": "Nie udało się połączyć z urządzeniem ESPHome.",
-      "invalid_auth": "Klucz szyfrowania API ESPHome jest nieprawidłowy.",
+      "cannot_connect": "Nie udało się połączyć z backendem add-onu Q-Tronic.",
+      "invalid_auth": "Token API add-onu jest niedostępny lub nieprawidłowy. Uruchom ponownie add-on, aby odtworzyć plik tokenu.",
       "invalid_recipient": "Sprawdź nazwę i numer telefonu odbiorcy.",
-      "invalid_sender": "Wybierz istniejącego zapisanego użytkownika albo podaj prawidłowy numer telefonu.",
+      "invalid_sender": "Wybierz kontakt z pełnym numerem E.164 albo wpisz numer w formacie +kod_kraju..., np. +48500100200.",
       "invalid_rule_name": "Wpisz nazwę reguły SMS.",
       "invalid_command": "Wpisz prawidłową, niepustą treść polecenia i sposób dopasowania.",
       "entity_not_found": "Wybrana encja nie istnieje lub jest obecnie niedostępna w Home Assistant.",
       "unsupported_entity": "Wybrana encja nie obsługuje tej operacji. Do odczytu stanu możesz wybrać dowolną encję.",
       "duplicate_sms_rule": "Dla tego nadawcy istnieje już reguła z taką samą komendą i sposobem dopasowania.",
       "invalid_reply_template": "Szablon odpowiedzi zawiera błąd lub nieobsługiwaną zmienną.",
+      "invalid_pin": "PIN musi mieć od 4 do 12 cyfr.",
+      "invalid_service_data": "Dane usługi muszą być obiektem JSON bez pola entity_id.",
+      "missing_value_placeholder": "Akcja ustawiania wartości wymaga `{value}` w treści polecenia.",
+      "invalid_time_condition": "Godzina warunku musi mieć format HH:MM.",
+      "invalid_state_condition": "Encja i wymagany stan warunku muszą być podane razem.",
+      "invalid_import_payload": "Nieprawidłowy lub częściowo nieobsługiwany JSON importu.",
       "forward_no_recipients": "Wybierz co najmniej jednego odbiorcę przekazywanych wiadomości.",
       "invalid_forward_recipient": "Wybrany odbiorca lub wykluczony nadawca nie istnieje już na liście zapisanych kontaktów.",
       "invalid_forward_phone": "Sprawdź dodatkowe wykluczone numery telefonu.",
@@ -274,6 +342,29 @@
           "description": "Jak długo modem ma wybierać numer, zanim rozłączy połączenie."
         }
       }
+    },
+    "hangup": {
+      "name": "Rozłącz",
+      "description": "Natychmiast zleć rozłączenie połączenia w wybranej bramce.",
+      "fields": {
+        "config_entry_id": {"name": "ID wpisu konfiguracyjnego", "description": "Wymagane przy wielu bramkach."}
+      }
+    },
+    "cancel_batch": {
+      "name": "Anuluj serię",
+      "description": "Anuluj aktywną lub oczekującą serię, jeśli backend to obsługuje.",
+      "fields": {
+        "config_entry_id": {"name": "ID wpisu konfiguracyjnego", "description": "Wymagane przy wielu bramkach."},
+        "batch_id": {"name": "ID serii", "description": "Opcjonalne; puste oznacza aktywną serię."}
+      }
+    },
+    "send_ussd": {
+      "name": "Wyślij USSD",
+      "description": "Wyślij kod USSD, jeśli backend i firmware ogłaszają tę funkcję.",
+      "fields": {
+        "config_entry_id": {"name": "ID wpisu konfiguracyjnego", "description": "Wymagane przy wielu bramkach."},
+        "code": {"name": "Kod USSD", "description": "Na przykład *100#."}
+      }
     }
   },
   "device_automation": {
@@ -286,6 +377,14 @@
     "restart_required": {
       "title": "Uruchom ponownie Home Assistant, aby dokończyć aktualizację Q-Tronic SMS Gateway",
       "description": "Add-on Q-Tronic SMS Gateway zsynchronizował nową wersję integracji (`{synced_version}`) do `/config/custom_components`, ale Home Assistant nadal działa na wersji `{current_version}`. Uruchom ponownie Home Assistant Core, aby załadować zaktualizowaną integrację i przywrócić akcje `qtronic_sms_gateway.send_sms` / `qtronic_sms_gateway.call_to`.\n\nPoprzednio zsynchronizowana wersja: `{previous_version}`."
+    },
+    "api_token_missing": {
+      "title": "Brak tokenu API Q-Tronic SMS Gateway",
+      "description": "Integracja nie znalazła `/config/.qtronic_sms_gateway/api_token`. Uruchom lub zaktualizuj add-on, aby utworzył token, a następnie przeładuj integrację."
+    },
+    "send_sms_capability_missing": {
+      "title": "Bramka nie udostępnia wysyłania SMS",
+      "description": "Backend nie zgłasza standardowej ani Unicode akcji SMS. Sprawdź firmware ESPHome i mapowanie akcji add-onu."
     }
   }
 }

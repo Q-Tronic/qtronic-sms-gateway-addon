@@ -7,6 +7,7 @@ from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 import logging
+from pathlib import Path
 from typing import Any
 
 import aiohttp
@@ -36,6 +37,7 @@ from .const import (
     CONF_SEND_SMS_ACTION,
     CONF_SMS_ENCODING,
     CONF_UNICODE_SEND_SMS_ACTION,
+    API_TOKEN_FILENAME,
     DEFAULT_CALL_FAILURE_ACTION,
     DEFAULT_CALL_MAX_RETRIES,
     DEFAULT_CALL_RETRY_DELAY_S,
@@ -57,8 +59,24 @@ from .const import (
     ROLE_SMS_MESSAGE,
     ROLE_SMS_SENDER,
     ROLE_USSD,
+    ROLE_SIM800_RECOVERY_COUNT,
+    ROLE_SIM800_LAST_RESPONSE_AGE,
+    ROLE_SIM800_STATE,
+    ROLE_SIM800_TIMEOUT_COUNT,
+    ROLE_SMS_LAST_ERROR,
+    ROLE_SMS_QUEUE_DEPTH,
+    ROLE_SMS_SENT_COUNT,
+    ROLE_SMS_FAILED_COUNT,
+    ROLE_SMS_UNKNOWN_COUNT,
+    ROLE_SMS_STATUS,
+    ROLE_UART_RX_OVERFLOW_COUNT,
 )
-from .recipients import SavedRecipient, deduplicate_phone_numbers, load_saved_recipients
+from .recipients import (
+    SavedRecipient,
+    deduplicate_phone_numbers,
+    load_saved_recipients,
+    merge_saved_recipients,
+)
 from .recipients import mask_phone_number
 from .restart_issue import async_sync_restart_issue
 from .sms import normalize_encoding
@@ -148,7 +166,52 @@ ENTITY_INFOS: dict[str, GatewayEntityInfo] = {
     ),
     ROLE_CALL_STATE: GatewayEntityInfo("call_state", "Call State", "mdi:phone"),
     ROLE_USSD: GatewayEntityInfo("ussd", "USSD", "mdi:card-text"),
+    ROLE_SMS_STATUS: GatewayEntityInfo("sms_status", "SMS Status", "mdi:message-check"),
+    ROLE_SMS_LAST_ERROR: GatewayEntityInfo(
+        "sms_last_error", "SMS Last Error", "mdi:message-alert"
+    ),
+    ROLE_SMS_QUEUE_DEPTH: GatewayEntityInfo(
+        "sms_queue_depth", "SMS Queue Depth", "mdi:tray-full"
+    ),
+    ROLE_SMS_SENT_COUNT: GatewayEntityInfo(
+        "sms_sent_count", "SMS Sent Count", "mdi:message-check"
+    ),
+    ROLE_SMS_FAILED_COUNT: GatewayEntityInfo(
+        "sms_failed_count", "SMS Failed Count", "mdi:message-alert"
+    ),
+    ROLE_SMS_UNKNOWN_COUNT: GatewayEntityInfo(
+        "sms_unknown_count", "SMS Unknown Count", "mdi:message-question"
+    ),
+    ROLE_SIM800_TIMEOUT_COUNT: GatewayEntityInfo(
+        "sim800_timeout_count", "SIM800 Timeout Count", "mdi:timer-alert"
+    ),
+    ROLE_SIM800_RECOVERY_COUNT: GatewayEntityInfo(
+        "sim800_recovery_count", "SIM800 Recovery Count", "mdi:restart-alert"
+    ),
+    ROLE_UART_RX_OVERFLOW_COUNT: GatewayEntityInfo(
+        "uart_rx_overflow_count", "UART RX Overflow Count", "mdi:alert-circle"
+    ),
+    ROLE_SIM800_LAST_RESPONSE_AGE: GatewayEntityInfo(
+        "sim800_last_response_age", "SIM800 Last Response Age", "mdi:timer-sand", "s"
+    ),
+    ROLE_SIM800_STATE: GatewayEntityInfo(
+        "sim800_state", "SIM800 State", "mdi:state-machine"
+    ),
 }
+
+
+def _read_api_token(path: Path) -> str:
+    """Read the add-on API token without ever logging its contents."""
+    try:
+        return path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+async def async_load_api_token(hass: HomeAssistant) -> str:
+    """Load the shared add-on bearer token from the HA config directory."""
+    path = Path(hass.config.path(API_TOKEN_FILENAME))
+    return await hass.async_add_executor_job(_read_api_token, path)
 
 
 def normalize_mac(value: str | None) -> str | None:
@@ -210,6 +273,7 @@ class QTronicSmsGatewayHub:
         self._poll_task: asyncio.Task | None = None
         self._stop_event = asyncio.Event()
         self._last_connect_error: str | None = None
+        self._api_token = ""
         self._gateway_host = ""
         self._states: dict[str, Any] = {}
         self._component_status: dict[str, str] = {
@@ -304,7 +368,9 @@ class QTronicSmsGatewayHub:
 
     @property
     def saved_recipients(self) -> tuple[SavedRecipient, ...]:
-        return self._addon_saved_recipients or self.configured_saved_recipients
+        return merge_saved_recipients(
+            self.configured_saved_recipients, self._addon_saved_recipients
+        )
 
     @property
     def saved_recipient_map(self) -> dict[str, SavedRecipient]:
@@ -451,6 +517,26 @@ class QTronicSmsGatewayHub:
         return bool(self._service_flags.get("call", True))
 
     @property
+    def can_hangup(self) -> bool:
+        return bool(self._service_flags.get("hangup", self.can_place_calls))
+
+    @property
+    def can_cancel_batch(self) -> bool:
+        return bool(self._service_flags.get("cancel_batch", True))
+
+    @property
+    def can_send_ussd(self) -> bool:
+        return bool(self._service_flags.get("send_ussd", False))
+
+    @property
+    def api_token_configured(self) -> bool:
+        return bool(self._api_token)
+
+    @property
+    def last_connect_error(self) -> str | None:
+        return self._last_connect_error
+
+    @property
     def can_send_with_default_encoding(self) -> bool:
         mode = normalize_encoding(self.sms_encoding)
         if mode == "ucs2":
@@ -473,6 +559,10 @@ class QTronicSmsGatewayHub:
     def state_for_role(self, role: str) -> Any:
         return self._states.get(role)
 
+    def has_state_for_role(self, role: str) -> bool:
+        """Return whether the backend currently exposes a diagnostic role."""
+        return role in self._states
+
     def component_status(self, component: str) -> str:
         """Return the backend-derived status of an ESP or modem component."""
         return self._component_status.get(component, "unknown")
@@ -488,6 +578,10 @@ class QTronicSmsGatewayHub:
 
     async def async_start(self) -> None:
         self._stop_event.clear()
+        self._api_token = await async_load_api_token(self.hass)
+        from .health_issues import async_sync_health_issues
+
+        await async_sync_health_issues(self.hass, self)
         _LOGGER.info("Q-Tronic integration using add-on backend at %s", self.addon_base_url)
         await async_sync_restart_issue(self.hass)
         await self._async_refresh_status(require_success=True)
@@ -515,6 +609,10 @@ class QTronicSmsGatewayHub:
         for listener in tuple(self._listeners):
             listener()
 
+    def notify_listeners(self) -> None:
+        """Notify entities after an integration-local state change."""
+        self._notify_listeners()
+
     async def async_send_sms(self, *, message: str, recipient: str) -> None:
         await self.async_send_sms_batch(message=message, recipients=[recipient])
 
@@ -530,13 +628,17 @@ class QTronicSmsGatewayHub:
             "message": message,
             "recipients": deduplicate_phone_numbers(recipients),
             "encoding": encoding or self.sms_encoding,
+            # Queue the operation and return its job ID. Waiting for every
+            # modem segment here could otherwise hold a Home Assistant service
+            # call forever while ESPHome is offline.
+            "wait": False,
         }
         _LOGGER.info(
             "HTTP SMS batch requested via %s for %s",
             self.addon_base_url,
             [mask_phone_number(phone) for phone in payload["recipients"]],
         )
-        result = await self._request_json("post", "/api/send-sms", payload, timeout_s=None)
+        result = await self._request_json("post", "/api/send-sms", payload, timeout_s=30)
         await self._async_refresh_status(require_success=False)
         return result
 
@@ -561,8 +663,29 @@ class QTronicSmsGatewayHub:
         return result
 
     async def async_hangup(self) -> dict[str, Any]:
+        if not self.can_hangup:
+            raise HomeAssistantError("The add-on backend does not support hangup.")
         _LOGGER.info("HTTP hangup requested via %s", self.addon_base_url)
-        result = await self._request_json("post", "/api/hangup", {}, timeout_s=None)
+        result = await self._request_json("post", "/api/hangup", {}, timeout_s=30)
+        await self._async_refresh_status(require_success=False)
+        return result
+
+    async def async_cancel_batch(self, batch_id: str | None = None) -> dict[str, Any]:
+        """Cancel an active/queued backend batch when supported."""
+        if not self.can_cancel_batch:
+            raise HomeAssistantError("The add-on backend does not support batch cancellation.")
+        payload = {"job_id": batch_id} if batch_id else {}
+        result = await self._request_json("post", "/api/cancel", payload, timeout_s=30)
+        await self._async_refresh_status(require_success=False)
+        return result
+
+    async def async_send_ussd(self, code: str) -> dict[str, Any]:
+        """Send a USSD request when advertised by the backend."""
+        if not self.can_send_ussd:
+            raise HomeAssistantError("The add-on backend does not support USSD requests.")
+        result = await self._request_json(
+            "post", "/api/send-ussd", {"code": code.strip()}, timeout_s=120
+        )
         await self._async_refresh_status(require_success=False)
         return result
 
@@ -588,6 +711,9 @@ class QTronicSmsGatewayHub:
             return
 
         self._apply_status_payload(status)
+        from .health_issues import async_sync_health_issues
+
+        await async_sync_health_issues(self.hass, self)
 
     def _apply_status_payload(self, payload: dict[str, Any]) -> None:
         payload_hash = repr(payload)
@@ -613,6 +739,11 @@ class QTronicSmsGatewayHub:
                 payload.get("services", {}).get("send_sms_unicode", True)
             ),
             "call": bool(payload.get("services", {}).get("call", True)),
+            "hangup": bool(payload.get("services", {}).get("hangup", True)),
+            "cancel_batch": bool(
+                payload.get("services", {}).get("cancel_batch", True)
+            ),
+            "send_ussd": bool(payload.get("services", {}).get("send_ussd", False)),
         }
         self._states = dict(payload.get("states") or {})
         component_status = payload.get("component_status") or {}
@@ -700,15 +831,27 @@ class QTronicSmsGatewayHub:
         session = async_get_clientsession(self.hass)
         url = f"{self.addon_base_url.rstrip('/')}{path}"
         timeout = aiohttp.ClientTimeout(total=timeout_s)
+        headers = (
+            {"Authorization": f"Bearer {self._api_token}"}
+            if path.startswith("/api") and self._api_token
+            else None
+        )
         try:
             async with session.request(
                 method.upper(),
                 url,
                 json=payload,
                 timeout=timeout,
+                headers=headers,
             ) as response:
                 body = await response.json(content_type=None)
                 if response.status == 401 or response.status == 403:
+                    refreshed_token = await async_load_api_token(self.hass)
+                    if refreshed_token and refreshed_token != self._api_token:
+                        self._api_token = refreshed_token
+                        return await self._request_json(
+                            method, path, payload, timeout_s=timeout_s
+                        )
                     raise GatewayAuthenticationError(f"HTTP {response.status} from add-on backend")
                 if response.status >= 400:
                     detail = body.get("detail") if isinstance(body, dict) else None
@@ -722,7 +865,9 @@ class QTronicSmsGatewayHub:
             ) from err
 
 
-async def validate_gateway_connection(data: dict[str, Any]) -> GatewayValidationInfo:
+async def validate_gateway_connection(
+    data: dict[str, Any], hass: HomeAssistant | None = None
+) -> GatewayValidationInfo:
     """Validate that the HTTP add-on backend can be reached."""
     host = str(data.get(CONF_HOST, "")).strip()
     port = int(data.get(CONF_PORT, ADDON_HTTP_PORT))
@@ -734,6 +879,10 @@ async def validate_gateway_connection(data: dict[str, Any]) -> GatewayValidation
     try:
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(url) as response:
+                if response.status in (401, 403):
+                    raise GatewayAuthenticationError(
+                        f"HTTP {response.status} returned from Q-Tronic add-on backend."
+                    )
                 if response.status >= 400:
                     raise GatewayConnectionError(
                         f"HTTP {response.status} returned from Q-Tronic add-on backend."
